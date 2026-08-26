@@ -226,8 +226,23 @@ void test_merge_reward_and_terminal_board() {
     });
     const auto terminal = search.search(blocked, 1);
     CHECK(!terminal.direction.has_value());
-    CHECK(terminal.value == 0.0);
-    CHECK(terminal.statistics.leaf_evaluations == 1);
+    // A terminal ROOT now reports Evaluator::terminal_value() and does NOT
+    // consult the evaluator, matching how terminal nodes are handled
+    // everywhere else in the tree.
+    //
+    // This expectation changed deliberately. Previously the search evaluated
+    // dead boards as though play continued, which at interior nodes was a real
+    // bug worth a factor of 1.7 in playing strength (E21): the learned network
+    // scores a full board of large tiles around 137,000, so search was rewarded
+    // for reaching terminal positions. The root case never affected play — no
+    // move exists there, so the value is informational — but leaving it
+    // inconsistent would leave the same trap for the next reader.
+    //
+    // BaselineHeuristic is a positional evaluator whose outputs go negative, so
+    // its terminal value is the interface default rather than 0.
+    CHECK(terminal.value == evaluator.terminal_value());
+    CHECK(terminal.value < 0.0);
+    CHECK(terminal.statistics.leaf_evaluations == 0);
 }
 
 void test_transposition_cache_matches_uncached_search() {

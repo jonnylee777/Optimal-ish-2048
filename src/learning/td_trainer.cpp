@@ -245,10 +245,22 @@ TrainResult train(
             long double evaluation_total = 0.0L;
             std::uint64_t best_tile = 0;
             for (std::uint64_t index = 0; index < config.evaluation_games; ++index) {
-                // Evaluation seeds are disjoint from training seeds so the
-                // curve measures generalisation, not memorisation.
-                const auto played = play_greedy_game(
-                    network, 0xE0000000ULL + game * config.evaluation_games + index);
+                // FIXED evaluation seeds: the same games at every point on the
+                // curve, so consecutive points differ only by what the network
+                // learned.
+                //
+                // This previously included `game` in the seed, giving each
+                // evaluation a disjoint set of games. Per-game scores here span
+                // 5k to 580k, so at 100 games that injects a +/-20% swing and
+                // the curve mixes learning progress with seed luck — one run
+                // appeared to *decline* from 204,098 to 195,259 while the
+                // network was in fact improving (a proper benchmark scored the
+                // final weights at 234,885).
+                //
+                // Still disjoint from training seeds, which start at
+                // config.seed and never reach this range, so the curve
+                // measures generalisation rather than memorisation.
+                const auto played = play_greedy_game(network, 0xE0000000ULL + index);
                 evaluation_total += static_cast<long double>(played.score);
                 const auto played_tile = played.max_tile_exponent == 0
                     ? std::uint64_t{0}

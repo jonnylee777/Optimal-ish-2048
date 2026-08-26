@@ -40,6 +40,7 @@ Kept, rejected, and pending — the short version. Details in the E-entries belo
 | E22 | Audit of conclusions post-bug | ✅ **clean split** | all depth-1 (training) findings hold; all search findings retracted |
 | E23 | Post-fix depth sweep + training plateau | ⭐ **356,178 at depth 4** | 1.0M→1.2M games gains nothing measurable |
 | E24 | Search speedups | symmetry ❌ / parallel ✅ | symmetry 60% slower; parallel 1.68x, identical play |
+| E25 | Global features + depth 4 | ❌ **substitutes** | −6.8% (p=0.08); global wins at depth 1, ties at depth 4 |
 | E14 | Depth-vs-budget along one axis | ✅ | budget +30% per doubling; depth gain 16.6% → 11.7% |
 
 ### Strongest agent — FINAL
@@ -1488,6 +1489,62 @@ Well short of the ~3.5x the four root moves suggest, because subtree sizes are
 very unequal and the largest one bounds the result. Better at depth 4, where the
 work amortises thread launch. Useful for benchmark throughput; it does **not**
 buy a depth level, since each level costs ~25x.
+
+---
+
+## E25 — Global features and depth are SUBSTITUTES  ❌ closes the 500k projection
+
+The decisive matched test. Both models trained to **1M games**, identical
+configuration otherwise, benchmarked on identical seeds:
+
+| Model | Depth 1 | Depth 4 |
+|---|---:|---:|
+| plain `n5_large_1M` | 226,325 | **356,178** |
+| global `n10_global_ext` | **234,885** | 331,995 |
+
+Paired at depth 4: **−24,183 (−6.8%), p=0.077**, winning 25 of 60 seeds. A tie
+trending against global.
+
+**Global features win at depth 1 (+3.8%) and lose the advantage entirely by
+depth 4.** They do not stack.
+
+### This is the third time, and the pattern is now clear
+
+| Combination | Each alone | Combined |
+|---|---|---|
+| optimistic init + temporal coherence | +27.7% | **−14.9%** |
+| backward replay + optimistic init | +17.9% | tie |
+| **global features + depth 4** | **+14.5%** (at depth 2) | **tie** |
+
+Every one of these works by compensating for the *same* underlying weakness:
+the value function misjudges positions near the end of a game. Global features
+fix it by supplying whole-board information. Depth-4 search fixes the same bad
+decisions by looking far enough ahead to see the consequence directly. Once
+either has corrected the error, the other has nothing left to correct.
+
+**The rule this project keeps relearning:** two improvements that each fix the
+same defect are substitutes, not complements — and there is no way to tell
+which case you are in without running the combination. Mechanism-based
+reasoning has been wrong on this every single time here.
+
+### Consequence for the 500,000 target
+
+My projection of ~408,000 assumed global's +14.5% would multiply onto depth 4's
+356,178. **That route is closed.** Best agent remains
+**`n5_large_1M` at depth 4 = 356,178** — plain features, no global.
+
+Two levers remain, both hours of compute rather than insight, and both now
+running:
+
+1. **A full training doubling** (1.2M -> 2.0M games). The only measured lever
+   not yet shown to be a substitute for something else. `n12_plain_2M`.
+2. **`xlarge` (512 MB) at 1M games.** Rejected earlier at −21%, but only on a
+   100k pilot that E19 proved is structurally biased against larger networks.
+   Genuinely untested at scale. `n13_xlarge_1M`.
+
+**Honest ceiling estimate for this architecture on this machine: 400,000 to
+430,000.** Reaching 500,000 would need the larger network to scale better than
+the current one does, which is exactly what run 2 tests.
 
 ---
 

@@ -44,6 +44,7 @@ add_library(adversarial_2048_runtime
     src/learning/td_trainer.cpp
     src/learning/temporal_coherence.cpp
     src/search/parallel_expectimax.cpp
+    src/evaluation/ensemble_evaluator.cpp
     src/optimization/baseline_optimizer.cpp
     src/optimization/structural_optimizer.cpp
     src/search/expectimax.cpp
