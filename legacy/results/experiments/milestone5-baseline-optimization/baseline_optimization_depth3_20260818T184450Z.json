@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "optimizer": "deterministic-multistage-random-search",
+  "objective": "mean game score",
+  "build_mode": "Release",
+  "git_commit": "unavailable",
+  "search_depth": 3,
+  "first_training_seed": 1000,
+  "optimizer_seed": 541637326,
+  "candidate_count": 16,
+  "minimum_weight_multiplier": 0.25,
+  "maximum_weight_multiplier": 4,
+  "runtime_seconds": 262.84843233399999,
+  "best_candidate_id": 9,
+  "best_weights": {
+    "empty_cells": 85.221621525239641,
+    "monotonicity": 44.83062947862652,
+    "smoothness": 43.676658929747916,
+    "corner_preference": 28.751796341054963
+  },
+  "stages": [
+    {"games": 3, "survivors": 6},
+    {"games": 8, "survivors": 3},
+    {"games": 20, "survivors": 1}
+  ]
+}

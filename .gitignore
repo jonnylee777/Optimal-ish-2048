@@ -1,0 +1,8 @@
+/build/
+/build-*/
+.DS_Store
+experiments/weights/*.bin
+# Temporal-coherence accumulators: 2 floats per weight, so 640 MB for the
+# 320 MB `large` network. Training-only state that a finished network never
+# needs, and regenerable by resuming training.
+experiments/weights/*.tcstate

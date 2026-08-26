@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "optimizer": "deterministic-multistage-structural-random-search",
+  "objective": "mean game score",
+  "build_mode": "Release",
+  "git_commit": "unavailable",
+  "search_depth": 4,
+  "minimum_path_probability": 0,
+  "optimize_baseline_weights": true,
+  "joint_weight_normalization": "sum-to-initial-weight-sum",
+  "first_training_seed": 1200,
+  "optimizer_seed": 1369907272,
+  "candidate_count": 32,
+  "minimum_weight_multiplier": 0.125,
+  "maximum_weight_multiplier": 8,
+  "minimum_baseline_weight_multiplier": 0.5,
+  "maximum_baseline_weight_multiplier": 2,
+  "runtime_seconds": 51070.1042055,
+  "best_candidate_id": 6,
+  "best_baseline_weights": {
+    "empty_cells": 115.82974924638357,
+    "monotonicity": 37.302367198010373,
+    "smoothness": 24.712293838159923,
+    "corner_preference": 27.468659832176016
+  },
+  "best_structural_weights": {
+    "main_line": 1.3726429758766383,
+    "structural_stability": 1.1744151055476499,
+    "adverse_stuck": 3.0596792676181983,
+    "structural_displacement": 0.56089881089668769
+  },
+  "controls": {
+    "candidate_0": "all structural weights zero",
+    "candidate_1": "current full structural weights",
+    "candidate_2": "main-line ablation",
+    "candidate_3": "main-line plus movement ablation"
+  },
+  "stages": [
+    {"games": 3, "survivors": 16},
+    {"games": 8, "survivors": 6},
+    {"games": 20, "survivors": 1}
+  ]
+}

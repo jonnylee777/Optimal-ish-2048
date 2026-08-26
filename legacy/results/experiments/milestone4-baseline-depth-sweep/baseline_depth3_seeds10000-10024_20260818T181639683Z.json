@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-08-18T18:16:39.683Z",
+  "git_commit": "unavailable",
+  "build_mode": "Release",
+  "agent": "baseline",
+  "evaluator": {
+    "type": "baseline-heuristic",
+    "feature_configuration": "baseline-v1:empty-cells,monotonicity,smoothness,corner-preference",
+    "parameters": {
+      "empty_cells": 270,
+      "monotonicity": 47,
+      "smoothness": 15,
+      "corner_preference": 100
+    }
+  },
+  "search": {
+    "depth": 3,
+    "depth_definition": "depth counts player layers; depth 1 = player move, spawn, evaluator",
+    "player_nodes": 36977849,
+    "chance_nodes": 123776545,
+    "leaf_evaluations": 514034753,
+    "spawn_outcomes": 550968240,
+    "cache_lookups": 160717655,
+    "cache_hits": 81245408,
+    "cache_hit_rate": 0.50551638524093701,
+    "elapsed_seconds": 35.838993466000097,
+    "nodes_per_second": 18828350.959135115
+  },
+  "experiment": {
+    "seed_partition": "validation",
+    "first_seed": 10000,
+    "last_seed": 10024,
+    "game_count": 25,
+    "optimization_configuration": "none"
+  },
+  "metrics": {
+    "mean_score": 27948,
+    "median_score": 29040,
+    "score_standard_deviation": 8176.1024129267525,
+    "score_confidence_95_low": 24742.967854132712,
+    "score_confidence_95_high": 31153.032145867288,
+    "best_score": 37184,
+    "mean_max_tile": 1843.2,
+    "highest_tile": 2048,
+    "achievement_rate_1024": 1,
+    "achievement_rate_2048": 0.80000000000000004,
+    "achievement_rate_4096": 0,
+    "achievement_rate_8192": 0,
+    "mean_moves": 1469.5599999999999,
+    "mean_runtime_seconds": 1.5370866565999999,
+    "mean_milliseconds_per_move": 1.0459502549062303
+  },
+  "games": [
+    {"seed": 10000, "score": 25804, "moves": 1325, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.404774084},
+    {"seed": 10001, "score": 36084, "moves": 1864, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.7949597909999999},
+    {"seed": 10002, "score": 36592, "moves": 1910, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.952758167},
+    {"seed": 10003, "score": 35360, "moves": 1831, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.797994375},
+    {"seed": 10004, "score": 32356, "moves": 1663, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.6046972079999999},
+    {"seed": 10005, "score": 17196, "moves": 1028, "max_tile_exponent": 10, "max_tile": 1024, "runtime_seconds": 1.1429119169999999},
+    {"seed": 10006, "score": 28376, "moves": 1503, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.5927732910000001},
+    {"seed": 10007, "score": 37184, "moves": 1951, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.70405875},
+    {"seed": 10008, "score": 32264, "moves": 1642, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.707057958},
+    {"seed": 10009, "score": 29040, "moves": 1541, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.6027224579999999},
+    {"seed": 10010, "score": 10416, "moves": 600, "max_tile_exponent": 10, "max_tile": 1024, "runtime_seconds": 0.85905112500000003},
+    {"seed": 10011, "score": 23808, "moves": 1231, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.431176542},
+    {"seed": 10012, "score": 16544, "moves": 983, "max_tile_exponent": 10, "max_tile": 1024, "runtime_seconds": 1.0282527079999999},
+    {"seed": 10013, "score": 35532, "moves": 1822, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.757535375},
+    {"seed": 10014, "score": 35484, "moves": 1814, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 2.0258015},
+    {"seed": 10015, "score": 32156, "moves": 1632, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.8454686250000001},
+    {"seed": 10016, "score": 23352, "moves": 1209, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.3661602500000001},
+    {"seed": 10017, "score": 34656, "moves": 1787, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.7107913749999999},
+    {"seed": 10018, "score": 34776, "moves": 1793, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.6150823329999999},
+    {"seed": 10019, "score": 36280, "moves": 1893, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.861050917},
+    {"seed": 10020, "score": 25800, "moves": 1337, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.646393875},
+    {"seed": 10021, "score": 12564, "moves": 767, "max_tile_exponent": 10, "max_tile": 1024, "runtime_seconds": 1.008216},
+    {"seed": 10022, "score": 27304, "moves": 1429, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.613431166},
+    {"seed": 10023, "score": 23288, "moves": 1200, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 1.2490091249999999},
+    {"seed": 10024, "score": 16484, "moves": 984, "max_tile_exponent": 10, "max_tile": 1024, "runtime_seconds": 1.1050374999999999}
+  ]
+}

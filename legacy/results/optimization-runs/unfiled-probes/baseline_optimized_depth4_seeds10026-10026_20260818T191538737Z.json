@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-08-18T19:15:38.737Z",
+  "git_commit": "unavailable",
+  "build_mode": "Release",
+  "agent": "baseline-optimized",
+  "evaluator": {
+    "type": "baseline-heuristic-optimized",
+    "feature_configuration": "baseline-v1:empty-cells,monotonicity,smoothness,corner-preference",
+    "parameters": {
+      "empty_cells": 85.221621525239641,
+      "monotonicity": 44.83062947862652,
+      "smoothness": 43.676658929747916,
+      "corner_preference": 28.751796341054963
+    }
+  },
+  "search": {
+    "depth": 4,
+    "depth_definition": "depth counts player layers; depth 1 = player move, spawn, evaluator",
+    "minimum_path_probability": 0,
+    "player_nodes": 45065294,
+    "chance_nodes": 144051494,
+    "leaf_evaluations": 483095083,
+    "spawn_outcomes": 528144380,
+    "cache_lookups": 189113150,
+    "cache_hits": 98532963,
+    "cache_hit_rate": 0.52102650185880783,
+    "elapsed_seconds": 12.255108701999999,
+    "nodes_per_second": 54851563.323163092
+  },
+  "experiment": {
+    "seed_partition": "validation",
+    "first_seed": 10026,
+    "last_seed": 10026,
+    "game_count": 1,
+    "optimization_configuration": "depth-3 deterministic multistage random search; candidate 9"
+  },
+  "metrics": {
+    "mean_score": 79004,
+    "median_score": 79004,
+    "score_standard_deviation": 0,
+    "score_confidence_95_low": 79004,
+    "score_confidence_95_high": 79004,
+    "best_score": 79004,
+    "mean_max_tile": 4096,
+    "highest_tile": 4096,
+    "achievement_rate_1024": 1,
+    "achievement_rate_2048": 1,
+    "achievement_rate_4096": 1,
+    "achievement_rate_8192": 0,
+    "mean_moves": 3638,
+    "mean_runtime_seconds": 15.260470667,
+    "mean_milliseconds_per_move": 4.1947417996151728
+  },
+  "games": [
+    {"seed": 10026, "score": 79004, "moves": 3638, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 15.260470667}
+  ]
+}

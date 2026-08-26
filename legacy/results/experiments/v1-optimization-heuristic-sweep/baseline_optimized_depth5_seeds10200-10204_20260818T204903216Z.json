@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-08-18T20:49:03.216Z",
+  "git_commit": "unavailable",
+  "build_mode": "Release",
+  "agent": "baseline-optimized",
+  "evaluator": {
+    "type": "baseline-heuristic-optimized",
+    "feature_configuration": "baseline-v1:empty-cells,monotonicity,smoothness,corner-preference",
+    "parameters": {
+      "empty_cells": 85.221621525239641,
+      "monotonicity": 44.83062947862652,
+      "smoothness": 43.676658929747916,
+      "corner_preference": 28.751796341054963
+    }
+  },
+  "search": {
+    "depth": 5,
+    "depth_definition": "depth counts player layers; depth 1 = player move, spawn, evaluator",
+    "minimum_path_probability": 0,
+    "player_nodes": 3144467354,
+    "chance_nodes": 10121357467,
+    "leaf_evaluations": 35885186585,
+    "spawn_outcomes": 39028921432,
+    "cache_lookups": 13265806263,
+    "cache_hits": 6833380858,
+    "cache_hit_rate": 0.51511236652529424,
+    "elapsed_seconds": 808.10621876800644,
+    "nodes_per_second": 60822464.008423157
+  },
+  "experiment": {
+    "seed_partition": "validation",
+    "first_seed": 10200,
+    "last_seed": 10204,
+    "game_count": 5,
+    "optimization_configuration": "depth-3 deterministic multistage random search; candidate 9"
+  },
+  "metrics": {
+    "mean_score": 83253.600000000006,
+    "median_score": 78824,
+    "score_standard_deviation": 28207.157758271213,
+    "score_confidence_95_low": 58528.936097774444,
+    "score_confidence_95_high": 107978.26390222556,
+    "best_score": 131300,
+    "mean_max_tile": 4915.1999999999998,
+    "highest_tile": 8192,
+    "achievement_rate_1024": 1,
+    "achievement_rate_2048": 1,
+    "achievement_rate_4096": 1,
+    "achievement_rate_8192": 0.20000000000000001,
+    "mean_moves": 3711.5999999999999,
+    "mean_runtime_seconds": 161.62184168340002,
+    "mean_milliseconds_per_move": 43.545059188328494
+  },
+  "games": [
+    {"seed": 10200, "score": 79668, "moves": 3698, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 167.41995591700001},
+    {"seed": 10201, "score": 78824, "moves": 3620, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 149.024156834},
+    {"seed": 10202, "score": 131300, "moves": 5476, "max_tile_exponent": 13, "max_tile": 8192, "runtime_seconds": 217.8444705},
+    {"seed": 10203, "score": 58744, "moves": 2709, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 130.16908208300001},
+    {"seed": 10204, "score": 67732, "moves": 3055, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 143.65154308300001}
+  ]
+}

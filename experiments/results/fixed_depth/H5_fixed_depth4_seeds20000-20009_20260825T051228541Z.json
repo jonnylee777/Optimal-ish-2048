@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "timestamp_utc": "2026-08-25T05:12:28.541Z",
+  "git_commit": "unavailable",
+  "build_mode": "Release",
+  "agent": "H5-fixed",
+  "evaluator": {
+    "type": "H5",
+    "feature_configuration": "H5:formation-aware-port:saturating-tile-weights+dpdf-vs-t-per-axis-max",
+    "parameters": {}
+  },
+  "search": {
+    "depth": 4,
+    "depth_definition": "depth counts player layers; depth 1 = player move, spawn, evaluator",
+    "minimum_path_probability": 0,
+    "time_limit_seconds": 0,
+    "adaptive_depth": false,
+    "completed_depth_usage": {
+      "depth_4_moves": 39588
+    },
+    "deadline_hit_rate": 0,
+    "player_nodes": 470013068,
+    "chance_nodes": 1522720495,
+    "leaf_evaluations": 5295429627,
+    "spawn_outcomes": 5765268066,
+    "cache_lookups": 1992693975,
+    "cache_hits": 1014139245,
+    "cache_hit_rate": 0.50892874556917356,
+    "elapsed_seconds": 198.1769285319991,
+    "nodes_per_second": 36776042.720952757
+  },
+  "experiment": {
+    "seed_partition": "custom",
+    "first_seed": 20000,
+    "last_seed": 20009,
+    "game_count": 10,
+    "optimization_configuration": "none"
+  },
+  "metrics": {
+    "mean_score": 89449.600000000006,
+    "median_score": 77644,
+    "score_standard_deviation": 48167.651226846334,
+    "score_confidence_95_low": 59594.980466182125,
+    "score_confidence_95_high": 119304.21953381789,
+    "best_score": 180484,
+    "worst_score": 35740,
+    "mean_max_tile": 4915.1999999999998,
+    "highest_tile": 8192,
+    "mode_max_tile": 4096,
+    "achievement_rate_1024": 1,
+    "achievement_rate_2048": 1,
+    "achievement_rate_4096": 0.80000000000000004,
+    "achievement_rate_8192": 0.29999999999999999,
+    "achievement_rate_16384": 0,
+    "achievement_rate_32768": 0,
+    "achievement_rate_65536": 0,
+    "mean_moves": 3958.8000000000002,
+    "median_moves": 3569.5,
+    "mean_runtime_seconds": 19.8199559209,
+    "mean_milliseconds_per_move": 5.0065565123017075,
+    "max_tile_distribution": {
+      "11": 2,
+      "12": 5,
+      "13": 3
+    }
+  },
+  "games": [
+    {"seed": 20000, "score": 37824, "moves": 1983, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 10.829044042},
+    {"seed": 20001, "score": 77020, "moves": 3568, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 21.770810000000001},
+    {"seed": 20002, "score": 80384, "moves": 3710, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 19.161262583999999},
+    {"seed": 20003, "score": 60176, "moves": 2784, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 14.459107709},
+    {"seed": 20004, "score": 156868, "moves": 6507, "max_tile_exponent": 13, "max_tile": 8192, "runtime_seconds": 29.985373082999999},
+    {"seed": 20005, "score": 78268, "moves": 3571, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 20.730188083000002},
+    {"seed": 20006, "score": 180484, "moves": 7567, "max_tile_exponent": 13, "max_tile": 8192, "runtime_seconds": 29.38971475},
+    {"seed": 20007, "score": 68956, "moves": 3096, "max_tile_exponent": 12, "max_tile": 4096, "runtime_seconds": 14.987826625},
+    {"seed": 20008, "score": 118776, "moves": 4973, "max_tile_exponent": 13, "max_tile": 8192, "runtime_seconds": 26.317501457999999},
+    {"seed": 20009, "score": 35740, "moves": 1829, "max_tile_exponent": 11, "max_tile": 2048, "runtime_seconds": 10.568730875}
+  ]
+}

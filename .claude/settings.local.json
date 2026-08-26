@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p legacy)",
+      "Bash(mv results *)",
+      "Bash(mkdir -p legacy/docs)",
+      "Bash(mv docs/heuristics.md legacy/docs/heuristics.md)",
+      "Bash(rmdir docs *)",
+      "Bash(cmake --build build-release -j8)",
+      "Bash(ctest --test-dir build-release --output-on-failure)",
+      "Bash(python3 tools/summarize_experiment.py --title \"H0 vs H1 vs H2 baseline\" --output experiments/summaries/h0-h1-baseline.md)",
+      "Bash(./build-release/run_experiment --heuristic H3 --search fixed --depth 4 --seeds quick --games 10 --output-dir experiments/results/fixed_depth)"
+    ]
+  }
+}
