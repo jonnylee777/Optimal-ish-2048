@@ -3,6 +3,7 @@
 #include "core/random.hpp"
 #include "core/spawn.hpp"
 
+#include "learning/position_store.hpp"
 #include "learning/temporal_coherence.hpp"
 
 #include "evaluation/n1_evaluator.hpp"
@@ -159,12 +160,40 @@ TrainResult train(
     std::vector<Board> episode_afterstates;
     std::vector<double> episode_rewards;
 
+    const auto use_seed_positions =
+        config.seed_position_fraction > 0.0 && !config.seed_positions.empty();
+
+    // Distillation runs first, so any subsequent self-play refines a network
+    // that already agrees with deep search rather than fighting it.
+    if (!config.distill_targets.empty()) {
+        for (std::uint64_t pass = 0; pass < config.distill_passes; ++pass) {
+            for (const auto& entry : config.distill_targets) {
+                // Same update machinery as TD, but the target is supplied
+                // rather than bootstrapped. `update` divides by the active
+                // weight count internally, exactly as the TD path does.
+                update(entry.board, static_cast<double>(entry.target), 0.0);
+            }
+        }
+    }
+
     for (std::uint64_t game = 0; game < config.games; ++game) {
         // Distinct, reproducible stream per game.
         RandomEngine rng(config.seed + game);
         Board board{};
-        static_cast<void>(spawn_random(board, rng));
-        static_cast<void>(spawn_random(board, rng));
+        bool seeded = false;
+        if (use_seed_positions) {
+            // Drawn from the episode's own stream, so a seeded run stays
+            // reproducible from (seed, games, position file) alone.
+            const auto draw = static_cast<double>(rng() % 1000000U) / 1000000.0;
+            if (draw < config.seed_position_fraction) {
+                board = config.seed_positions[rng() % config.seed_positions.size()];
+                seeded = true;
+            }
+        }
+        if (!seeded) {
+            static_cast<void>(spawn_random(board, rng));
+            static_cast<void>(spawn_random(board, rng));
+        }
 
         // The update is applied one move late, because the target for an
         // afterstate needs the NEXT move's reward and the NEXT afterstate:
@@ -221,12 +250,27 @@ TrainResult train(
                 episode_rewards.push_back(0.0);
                 // Walk backward so each successor's value is already updated
                 // by the time its predecessor reads it.
+                //
+                // `lambda_return` carries G_{t+1} up the trajectory. At
+                // lambda = 0 the term vanishes and every target is the ordinary
+                // 1-step bootstrap, so this path stays bit-identical to plain
+                // TD(0) unless lambda is set.
+                double lambda_return = 0.0;
                 for (std::size_t step = episode_afterstates.size(); step-- > 0;) {
-                    const auto successor =
-                        step + 1 < episode_afterstates.size()
-                            ? std::optional<double>(network.value(episode_afterstates[step + 1]))
-                            : std::nullopt;
-                    update(episode_afterstates[step], episode_rewards[step], successor);
+                    if (step + 1 >= episode_afterstates.size()) {
+                        // Terminal: no successor, no further reward.
+                        update(episode_afterstates[step], 0.0, std::nullopt);
+                        lambda_return = 0.0;
+                        continue;
+                    }
+                    const auto successor_value = network.value(episode_afterstates[step + 1]);
+                    const auto target = episode_rewards[step] +
+                                        (1.0 - config.td_lambda) * successor_value +
+                                        config.td_lambda * lambda_return;
+                    // update() forms reward + next_value, so pass the finished
+                    // target with a zero successor.
+                    update(episode_afterstates[step], target, 0.0);
+                    lambda_return = target;
                 }
             }
         } else if (pending_afterstate.has_value()) {

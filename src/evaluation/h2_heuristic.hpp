@@ -11,7 +11,7 @@ namespace adversarial_2048 {
 // additionally rewards the max tile's two orthogonal neighbors for holding
 // exactly the next-largest value, reinforcing the classic "build a
 // descending chain out from the corner" strategy. Isolates one change from
-// H1 for a clean comparison. See docs/experiment-taxonomy.md.
+// H1 for a clean comparison. See docs/phase1-heuristics.md.
 struct H2Features {
     BaselineFeatures baseline;
     double corner_chain{};

@@ -6,8 +6,10 @@
 // keys on the board alone, so it would serve stale values if weights changed
 // mid-search. Weights are frozen before any search-based evaluation.
 #include "learning/ntuple_network.hpp"
+#include "learning/position_store.hpp"
 #include "learning/td_trainer.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -36,11 +38,21 @@ void print_usage(const char* program) {
         << "  --temporal-coherence  per-weight adaptive step sizes (~3x memory)\n"
         << "  --optimistic-init X   start weights so an unseen board scores ~X\n"
         << "  --backward-updates    replay each episode in reverse (faster terminal signal)\n"
+        << "  --lambda X            TD(lambda) return blend, 0=TD(0) 1=Monte Carlo (needs backward)\n"
         << "  --tuples NAME         shape: default 128MB | large 320MB | xlarge 512MB\n"
         << "  --stages N            independent weight sets by max tile (default 1)\n"
+        << "  --stage-split E       max-tile exponent where stage 1 begins (default 10)\n"
+        << "  --promote-stages      copy resumed weights into every stage (no cold start)\n"
+        << "  --adapt-features      resume a file that lacks this run's feature tables\n"
         << "  --global-features     add a whole-board (empties x max tile) feature\n"
         << "  --tc-state PATH       persist TC accumulators here (enables real resume)\n"
-        << "  --train-depth N       pick training actions by depth-N search (default 1)\n";
+        << "  --train-depth N       pick training actions by depth-N search (default 1)\n"
+        << "  --structural-features add snake-order / cornered / empties features\n"
+        << "  --relative-indexing   index tiles relative to the board max (scale transfer)\n"
+        << "  --distill PATH        fit to (position, deep-search value) pairs first\n"
+        << "  --distill-passes N    times to sweep the target set (default 1)\n"
+        << "  --seed-positions PATH collected late-game boards to start episodes from\n"
+        << "  --seed-fraction X     fraction of episodes started from them (default 0.5)\n";
 }
 
 [[nodiscard]] std::uint64_t parse_u64(const std::string& text, const std::string& flag) {
@@ -85,6 +97,13 @@ int main(int argc, char* argv[]) {
     std::filesystem::path out;
     std::filesystem::path resume;
     std::string tuples = "default";
+    std::filesystem::path seed_positions_path;
+    std::filesystem::path distill_path;
+    auto indexing = nn::IndexingMode::absolute;
+    std::uint8_t stage_split = 10;
+    bool promote_stages = false;
+    bool structural_features = false;
+    bool adapt_features = false;
     std::uint64_t stages = 1;
     bool global_features = false;
     nn::TrainConfig config;
@@ -110,6 +129,18 @@ int main(int argc, char* argv[]) {
                 config.evaluate_every = parse_u64(require_value(args, index, flag), flag);
             } else if (flag == "--evaluation-games") {
                 config.evaluation_games = parse_u64(require_value(args, index, flag), flag);
+            } else if (flag == "--structural-features") {
+                structural_features = true;
+            } else if (flag == "--relative-indexing") {
+                indexing = nn::IndexingMode::relative;
+            } else if (flag == "--distill") {
+                distill_path = require_value(args, index, flag);
+            } else if (flag == "--distill-passes") {
+                config.distill_passes = parse_u64(require_value(args, index, flag), flag);
+            } else if (flag == "--seed-positions") {
+                seed_positions_path = require_value(args, index, flag);
+            } else if (flag == "--seed-fraction") {
+                config.seed_position_fraction = parse_double(require_value(args, index, flag), flag);
             } else if (flag == "--train-depth") {
                 config.training_search_depth =
                     static_cast<std::uint32_t>(parse_u64(require_value(args, index, flag), flag));
@@ -117,10 +148,19 @@ int main(int argc, char* argv[]) {
                 config.temporal_coherence_state = require_value(args, index, flag);
             } else if (flag == "--global-features") {
                 global_features = true;
+            } else if (flag == "--stage-split") {
+                stage_split = static_cast<std::uint8_t>(
+                    parse_u64(require_value(args, index, flag), flag));
+            } else if (flag == "--adapt-features") {
+                adapt_features = true;
+            } else if (flag == "--promote-stages") {
+                promote_stages = true;
             } else if (flag == "--stages") {
                 stages = parse_u64(require_value(args, index, flag), flag);
             } else if (flag == "--tuples") {
                 tuples = require_value(args, index, flag);
+            } else if (flag == "--lambda") {
+                config.td_lambda = parse_double(require_value(args, index, flag), flag);
             } else if (flag == "--backward-updates") {
                 config.backward_updates = true;
             } else if (flag == "--temporal-coherence") {
@@ -152,10 +192,35 @@ int main(int argc, char* argv[]) {
 
     try {
         nn::NTupleNetwork network(nn::named_tuple_specs(tuples),
-                                  static_cast<std::size_t>(stages), global_features);
+                                  static_cast<std::size_t>(stages), global_features, indexing,
+                                  stage_split, structural_features);
         if (!resume.empty()) {
-            network.load(resume);
-            std::cout << "resumed from " << resume << '\n';
+            if (promote_stages && stages > 1) {
+                // Resume a SINGLE-stage file into a multi-stage network, then
+                // copy those weights into every stage. Without this each new
+                // stage starts at zero and the high-tile stage is both
+                // untrained and starved — the two reasons the first
+                // multi-stage attempt lost 19.4%.
+                const auto source = nn::NTupleNetwork::load_from(resume);
+                if (source.stage_count() != 1) {
+                    throw std::invalid_argument(
+                        "--promote-stages expects a single-stage weight file");
+                }
+                std::copy(source.weights().begin(), source.weights().end(),
+                          network.weights().begin());
+                network.replicate_stage_zero();
+                std::cout << "resumed from " << resume << " and PROMOTED into "
+                          << stages << " stages (split at exponent "
+                          << static_cast<int>(stage_split) << ")\n";
+            } else if (adapt_features) {
+                const auto source = nn::NTupleNetwork::load_from(resume);
+                network.adopt_tuple_weights(source);
+                std::cout << "resumed TUPLE weights from " << resume
+                          << "; new feature tables start at zero\n";
+            } else {
+                network.load(resume);
+                std::cout << "resumed from " << resume << '\n';
+            }
             // Only meaningful when a state file was supplied AND already
             // exists; a first run with --tc-state should start fresh.
             if (!config.temporal_coherence_state.empty() &&
@@ -179,9 +244,37 @@ int main(int argc, char* argv[]) {
                   << ", seed " << config.seed
                   << (config.temporal_coherence ? ", temporal coherence" : "")
                   << '\n';
+        if (!distill_path.empty()) {
+            config.distill_targets = nn::load_valued_positions(distill_path);
+            std::cout << "  distilling from " << config.distill_targets.size()
+                      << " deep-search targets, " << config.distill_passes << " pass(es)\n";
+        }
+        if (!seed_positions_path.empty()) {
+            config.seed_positions = nn::load_positions(seed_positions_path);
+            if (config.seed_position_fraction <= 0.0) {
+                config.seed_position_fraction = 0.5;  // sensible default when a file is given
+            }
+            std::cout << "  seeded episodes: " << config.seed_positions.size()
+                      << " positions, " << (100.0 * config.seed_position_fraction)
+                      << "% of episodes\n";
+        }
+        if (config.td_lambda > 0.0) {
+            if (!config.backward_updates) {
+                throw std::invalid_argument(
+                    "--lambda needs --backward-updates (the lambda-return is computed "
+                    "backward over a buffered episode)");
+            }
+            std::cout << "  TD(lambda) = " << config.td_lambda << '\n';
+        }
         if (config.training_search_depth > 1) {
             std::cout << "  training actions chosen by depth-" << config.training_search_depth
                       << " search (transposition table off)\n";
+        }
+        if (network.indexing() == nn::IndexingMode::relative) {
+            std::cout << "  indexing: RELATIVE to board max (tile downgrading)\n";
+        }
+        if (network.has_structural_features()) {
+            std::cout << "  structural features: on (snake order, cornered, empties)\n";
         }
         if (network.has_global_features()) {
             std::cout << "  global features: on (whole-board empties x max tile)\n";

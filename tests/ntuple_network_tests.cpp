@@ -716,6 +716,181 @@ void test_global_features_round_trip_and_mismatch() {
     std::filesystem::remove(path);
 }
 
+// GATE: relative indexing must make two boards that differ ONLY in absolute
+// scale produce the same value. That equality is the entire point — it is what
+// lets competence built at 2048 transfer to 16384, a regime the agent reaches
+// in only 3% of games.
+void test_relative_indexing_shares_across_scales() {
+    // Same shape, one scale apart: {2048,1024,512,256} vs {16384,8192,4096,2048}.
+    a2048::CellArray low{};
+    low[0] = 11; low[1] = 10; low[2] = 9; low[3] = 8; low[5] = 3;
+    a2048::CellArray high{};
+    high[0] = 14; high[1] = 13; high[2] = 12; high[3] = 11; high[5] = 6;
+
+    nn::NTupleNetwork relative(nn::default_tuple_specs(), 1, false,
+                               nn::IndexingMode::relative);
+    relative.update(a2048::encode(low), 3.0);
+    // Training only on the LOW board must move the HIGH board's value by the
+    // same amount, because they index identically.
+    CHECK(std::abs(relative.value(a2048::encode(high)) -
+                   relative.value(a2048::encode(low))) < 1e-9);
+    CHECK(relative.value(a2048::encode(high)) != 0.0);
+
+    // Control: absolute indexing must NOT make them equal, or the test proves
+    // nothing about the mode.
+    //
+    // Note it does not make them fully DISJOINT either. Each tuple expands to 8
+    // dihedral orderings, and some orderings land entirely on cells that are
+    // empty in both boards, so both index the same all-zero entry. Asserting
+    // `value(high) == 0` therefore fails — a wrong expectation on my part, not
+    // a defect. Equality is the property that matters here.
+    nn::NTupleNetwork absolute(nn::default_tuple_specs());
+    absolute.update(a2048::encode(low), 3.0);
+    CHECK(absolute.value(a2048::encode(high)) != absolute.value(a2048::encode(low)));
+}
+
+// An empty cell must stay empty under normalisation. If a shift could turn a 0
+// into a 1, "no tile here" and "a 2 here" would collide and every index would
+// be wrong.
+void test_relative_indexing_preserves_empty_cells() {
+    nn::NTupleNetwork relative(nn::default_tuple_specs(), 1, false,
+                               nn::IndexingMode::relative);
+    a2048::CellArray sparse{};
+    sparse[0] = 1;  // a single 2, so the shift is maximal (14)
+    const auto only_a_two = a2048::encode(sparse);
+
+    a2048::CellArray full_of_twos{};
+    full_of_twos.fill(1);
+    // These differ only in which cells are EMPTY, so if empties were shifted
+    // they would collapse to the same index and the same value.
+    relative.update(only_a_two, 5.0);
+    CHECK(relative.value(a2048::encode(full_of_twos)) != relative.value(only_a_two));
+}
+
+// Indexing mode is part of the shape: a relative-indexed file loaded as
+// absolute would read plausible numbers from entirely wrong entries.
+void test_relative_indexing_round_trips_and_rejects_mismatch() {
+    nn::NTupleNetwork original(nn::default_tuple_specs(), 1, false,
+                               nn::IndexingMode::relative);
+    const auto board = a2048::encode(a2048::CellArray{14, 13, 12, 11, 0, 0, 0, 0,
+                                                     0, 0, 0, 0, 0, 0, 0, 0});
+    original.update(board, 2.25);
+    const auto path = std::filesystem::temp_directory_path() / "a2048_relative_test.bin";
+    original.save(path);
+
+    const auto restored = nn::NTupleNetwork::load_from(path);
+    CHECK(restored.indexing() == nn::IndexingMode::relative);
+    CHECK(restored.fingerprint() == original.fingerprint());
+    CHECK(std::abs(restored.value(board) - original.value(board)) < 1e-9);
+
+    nn::NTupleNetwork absolute(nn::default_tuple_specs());
+    CHECK_THROWS(absolute.load(path));
+    std::filesystem::remove(path);
+}
+
+// GATE: promotion must leave every stage an exact copy of stage 0, so a
+// freshly split network plays identically to the single-stage one it came from.
+// If it did not, splitting would silently discard training rather than
+// preserve it.
+void test_stage_promotion_copies_stage_zero() {
+    constexpr std::size_t kStages = 2;
+    constexpr std::uint8_t kSplit = 14;  // 16384, where the real wall sits
+    nn::NTupleNetwork staged(nn::default_tuple_specs(), kStages, false,
+                             nn::IndexingMode::absolute, kSplit);
+
+    // A board in stage 0 and one in stage 1, differing only in max tile.
+    const auto low = a2048::encode(a2048::CellArray{1, 2, 3, 4, 0, 0, 0, 0,
+                                                   0, 0, 0, 0, 0, 0, 0, 0});
+    a2048::CellArray high_cells{1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    high_cells[15] = kSplit;
+    const auto high = a2048::encode(high_cells);
+    CHECK(nn::stage_of(low, kStages, kSplit) == 0);
+    CHECK(nn::stage_of(high, kStages, kSplit) == 1);
+
+    staged.update(low, 2.0);
+    const auto stage_zero_value = staged.value(low);
+    CHECK(stage_zero_value != 0.0);
+
+    staged.replicate_stage_zero();
+    // Every stage now holds the same weights, so stage 1 must return what
+    // stage 0 learned for the same tuple pattern. The boards differ by one
+    // cell, so compare the raw stage-1 table against stage 0 instead.
+    const auto& weights = staged.weights();
+    const auto stride = staged.total_weight_count() / kStages;
+    for (std::size_t index = 0; index < stride; index += 9973) {  // sparse probe
+        CHECK(weights[index] == weights[stride + index]);
+    }
+}
+
+// The split point must be honoured: with base 14, a 8192-max board belongs to
+// stage 0 and a 16384-max board to stage 1. Splitting at the wrong tile is why
+// the first multi-stage attempt gave the endgame no dedicated weights.
+void test_stage_split_point_is_configurable() {
+    constexpr std::size_t kStages = 2;
+    a2048::CellArray cells{};
+    cells[0] = 13;  // 8192
+    CHECK(nn::stage_of(a2048::encode(cells), kStages, 14) == 0);
+    cells[0] = 14;  // 16384
+    CHECK(nn::stage_of(a2048::encode(cells), kStages, 14) == 1);
+    // And the legacy default still splits at 1024.
+    cells[0] = 10;
+    CHECK(nn::stage_of(a2048::encode(cells), kStages, 10) == 1);
+}
+
+// GATE: the structural feature must distinguish boards that every tuple sees
+// identically. That is its entire justification — a lookup table over fixed cell
+// groups cannot express "the large tiles are in descending order", and this
+// feature is only worth its cost if it actually can.
+void test_structural_feature_sees_snake_order() {
+    // Same four tiles, same cells, same empty count, same max — but one is in
+    // descending snake order along the top row and the other is scrambled.
+    a2048::CellArray ordered{};
+    ordered[0] = 13; ordered[1] = 12; ordered[2] = 11; ordered[3] = 10;
+    a2048::CellArray scrambled{};
+    scrambled[0] = 11; scrambled[1] = 13; scrambled[2] = 10; scrambled[3] = 12;
+
+    const auto a = a2048::encode(ordered);
+    const auto b = a2048::encode(scrambled);
+    // Identical on every quantity the OTHER features can see.
+    CHECK(a2048::empty_count(a) == a2048::empty_count(b));
+    CHECK(a2048::max_exponent(a) == a2048::max_exponent(b));
+    CHECK(nn::global_feature_index(a) == nn::global_feature_index(b));
+    // But the structural feature must tell them apart.
+    CHECK(nn::structural_feature_index(a) != nn::structural_feature_index(b));
+    CHECK(nn::structural_feature_index(a) < nn::kStructuralFeatureSize);
+    CHECK(nn::structural_feature_index(b) < nn::kStructuralFeatureSize);
+}
+
+// Losing the corner must change the index -- it is how the snake collapses.
+void test_structural_feature_detects_cornered_max() {
+    a2048::CellArray cornered{};
+    cornered[0] = 14; cornered[1] = 13;
+    a2048::CellArray central{};
+    central[5] = 14; central[6] = 13;
+    CHECK(nn::structural_feature_index(a2048::encode(cornered)) !=
+          nn::structural_feature_index(a2048::encode(central)));
+}
+
+void test_structural_features_cost_one_weight_and_round_trip() {
+    nn::NTupleNetwork plain(nn::default_tuple_specs());
+    nn::NTupleNetwork structural(nn::default_tuple_specs(), 1, false,
+                                 nn::IndexingMode::absolute, 10, true);
+    CHECK(structural.active_weight_count() == plain.active_weight_count() + 1);
+    CHECK(structural.total_weight_count() ==
+          plain.total_weight_count() + nn::kStructuralFeatureSize);
+
+    const auto board = a2048::encode(a2048::CellArray{13, 12, 11, 10, 0, 0, 0, 0,
+                                                     0, 0, 0, 0, 0, 0, 0, 0});
+    structural.update(board, 1.5);
+    const auto path = std::filesystem::temp_directory_path() / "a2048_structural.bin";
+    structural.save(path);
+    const auto restored = nn::NTupleNetwork::load_from(path);
+    CHECK(restored.has_structural_features());
+    CHECK(restored.fingerprint() == structural.fingerprint());
+    CHECK_THROWS(plain.load(path));
+    std::filesystem::remove(path);
+}
+
 }  // namespace
 
 int main() {
@@ -736,11 +911,25 @@ int main() {
         {"named tuple specs reject unknown names", test_named_tuple_specs_rejects_unknown_names},
         {"named tuple specs have expected sizes", test_named_tuple_specs_have_expected_sizes},
         {"GATE: stage function is monotone over a game", test_stage_function_is_monotone_over_a_game},
+        {"GATE: stage promotion copies stage zero", test_stage_promotion_copies_stage_zero},
+        {"stage split point is configurable", test_stage_split_point_is_configurable},
+        {"GATE: structural feature sees snake order",
+         test_structural_feature_sees_snake_order},
+        {"structural feature detects cornered max",
+         test_structural_feature_detects_cornered_max},
+        {"structural features cost one weight, round-trip",
+         test_structural_features_cost_one_weight_and_round_trip},
         {"single-stage network is unchanged", test_single_stage_is_unchanged},
         {"stages are independent", test_stages_are_independent},
         {"staged save/load round-trips, mismatch rejected",
          test_staged_save_load_round_trip_and_mismatch},
         {"GATE: global feature sees the whole board", test_global_feature_sees_the_whole_board},
+        {"GATE: relative indexing shares across scales",
+         test_relative_indexing_shares_across_scales},
+        {"relative indexing preserves empty cells",
+         test_relative_indexing_preserves_empty_cells},
+        {"relative indexing round-trips, mismatch rejected",
+         test_relative_indexing_round_trips_and_rejects_mismatch},
         {"global features cost one weight, isolate cleanly",
          test_global_features_cost_and_isolation},
         {"global feature participates in updates",

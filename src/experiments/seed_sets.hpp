@@ -11,7 +11,7 @@ inline constexpr RunConfig training{1'000, 1'000};
 inline constexpr RunConfig validation{500, 10'000};
 inline constexpr RunConfig final_test{1'000, 50'000};
 
-// Standardized cross-heuristic comparison sets (see docs/experiment-taxonomy.md).
+// Standardized cross-heuristic comparison sets (see docs/phase1-heuristics.md).
 // Distinct purpose from training/validation/final_test above, which exist to
 // keep weight optimization from overfitting to its own selection seeds.
 // Disjoint from those ranges and from each other by construction.

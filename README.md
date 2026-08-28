@@ -1,8 +1,51 @@
 # Adversarial 2048
 
-A C++20 research project for measuring progressively stronger approaches to
-2048 play. The current implementation covers the board engine, baseline agents,
-the four-part baseline heuristic, and instrumented Expectimax search.
+A C++20 research project building the strongest 2048 agent that fits on a
+laptop, by measuring progressively different approaches against each other under
+one benchmark harness.
+
+**Current best: 356,178 mean score**, reaching 16384 in 97% of games and 32768
+in 3%. See **[RESULTS.md](RESULTS.md)** for every version, how it was trained,
+and what it scored.
+
+## Four methodologies, in the order they were tried
+
+| Phase | Approach | Best | Documentation |
+|---|---|---:|---|
+| 1 | Hand-written heuristics + expectimax | 109,213 | [phase1-heuristics.md](docs/phase1-heuristics.md) |
+| 2 | Exact endgame tablebase | abandoned | [phase2-endgame-tablebase.md](docs/phase2-endgame-tablebase.md) |
+| 3 | Temporal-difference n-tuple learning | **356,178** | [phase3-td-learning.md](docs/phase3-td-learning.md) |
+| 4 | Structural / architectural changes | in progress | [experiment-log.md](docs/experiment-log.md) |
+
+Each phase is a genuinely different way of deciding a move, not a tuning of the
+last. Phase 1 scores boards by hand-written rules; phase 2 tried to solve the
+endgame exactly; phase 3 learns a value function from self-play; phase 4 attacks
+the ceiling phase 3 hit.
+
+## Documentation map
+
+| Document | Read it for |
+|---|---|
+| [RESULTS.md](RESULTS.md) | every agent version, its recipe, and its score |
+| [CLAUDE.md](CLAUDE.md) | conventions and invariants — start here before editing |
+| [docs/DESIGN.md](docs/DESIGN.md) | architecture, components, control flows |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | current state, next steps, open questions |
+| [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) | what was tried, how, and what it showed |
+| [docs/experiment-log.md](docs/experiment-log.md) | full chronological log, including retractions |
+
+**Read [docs/ROADMAP.md](docs/ROADMAP.md) before proposing work.** Ten
+approaches have already been measured and rejected; several appealing ideas are
+on that list.
+
+## Reading the numbers
+
+Per-game scores span roughly 3,000 to 580,000, so small samples rank
+configurations *wrongly*; this project retracted four conclusions drawn from
+samples of 3-30. Use `tools/compare_runs.py` for a paired significance test
+between two runs, and treat anything below n=200 as a pilot.
+
+The implementation covers the board engine, baseline agents, hand-written
+heuristics H0-H5, the learned N-series, and instrumented Expectimax search.
 
 ## Requirements
 
@@ -30,7 +73,7 @@ cmake --build build-release --target engine_benchmark
 This is the current, recommended way to run experiments. It replaces the
 ambiguous `v1`/`v1.1`/`v2`/`v2.1` milestone naming used below with
 independent flags for heuristic, weights, and search configuration — see
-[`docs/experiment-taxonomy.md`](docs/experiment-taxonomy.md) for what H0/H1
+[`docs/phase1-heuristics.md`](docs/phase1-heuristics.md) for what H0/H1
 mean and which search capabilities are exposed as ablation switches.
 
 ```sh
@@ -54,13 +97,13 @@ cmake --build build-release --target run_experiment
 ```
 
 Every run writes CSV/JSON into `--output-dir` (defaults to
-`experiments/results/fixed_depth/` or `experiments/results/timed/` based on
+`experiments/results/phase1-heuristics/` or `experiments/results/phase1-heuristics/` based on
 `--search`) via the same `result_writer` used by the legacy CLI below, with
 several additive metrics fields (min score, median moves, full max-tile
 distribution, achievement rates up to 65536, a resolved `deadline_hit_rate`
 where computable, and a real `git_commit`). See
 [`experiments/README.md`](experiments/README.md) and
-[`ROADMAP.md`](ROADMAP.md) for what's built and what's next.
+[`ROADMAP.md`](docs/ROADMAP.md) for what's built and what's next.
 
 ## Legacy work
 

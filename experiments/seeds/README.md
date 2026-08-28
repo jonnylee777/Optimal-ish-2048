@@ -18,7 +18,7 @@ All disjoint from each other and from training (1000-1999) / validation
 A custom range is also accepted directly as `FIRST-LAST` (e.g. `20500-20502`
 for a 3-game sanity check) — useful for expensive configurations where even
 the `quick` set isn't affordable. See "Depth sizing guidance" in
-[`../../docs/experiment-taxonomy.md`](../../docs/experiment-taxonomy.md) for
+[`../../docs/phase1-heuristics.md`](../../docs/phase1-heuristics.md) for
 when to reach for a custom range instead of a named set: it's not just
 fixed-depth-8 that's expensive — timed/adaptive runs are expensive in a
 different way (cost scales with total moves played across a game, which can

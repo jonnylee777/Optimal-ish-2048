@@ -3,7 +3,7 @@
 This replaces the ambiguous `v1`/`v1.1`/`v2`/`v2.1` milestone naming for all
 new work. It separates three independent axes — **heuristic**, **search**,
 **weights** — so changing one never silently changes another. See
-[`../ROADMAP.md`](../ROADMAP.md) for what isn't built yet, and
+[`../ROADMAP.md`](ROADMAP.md) for what isn't built yet, and
 [`../legacy/docs/heuristics.md`](../legacy/docs/heuristics.md) for how the
 old names map onto history.
 
@@ -34,7 +34,7 @@ declared, `--weight name=value` is rejected for N1, and provenance is recorded
 as the weight-file path plus a content fingerprint instead of a parameter list
 (33.7M weights cannot fit in `ResultMetadata::evaluator_parameters`).
 
-See [`ntuple-learning.md`](ntuple-learning.md) for the algorithm, the network
+See [`phase3-td-learning.md`](phase3-td-learning.md) for the algorithm, the network
 shape, and why this approach fits our hardware where the endgame tablebase
 did not.
 
@@ -112,7 +112,7 @@ For an afterstate evaluator, `--search fixed --depth 1` is therefore *exactly*
 1-ply greedy `max(reward + V(afterstate))`, which
 `tests/evaluation_semantics_tests.cpp` pins as an identity. Getting this wrong
 cost N1 a factor of 7 in playing strength before it was found; see
-`ULTIMATE_AGENT_PROGRESS.md`.
+`experiment-log.md`.
 
 Future distinct search algorithms (move ordering, tree reuse, further
 pruning) get their own S-names (S1, S2, ...) once implemented, each

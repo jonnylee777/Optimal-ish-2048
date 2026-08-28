@@ -2,7 +2,7 @@
 
 Standardized experiment output, produced by `run_experiment`
 ([`../src/run_experiment_main.cpp`](../src/run_experiment_main.cpp)). See
-[`../docs/experiment-taxonomy.md`](../docs/experiment-taxonomy.md) for what
+[`../docs/phase1-heuristics.md`](../docs/phase1-heuristics.md) for what
 H0/H1/etc. and the search-capability flags mean.
 
 This is a fresh tree, separate from [`../legacy/results/`](../legacy/results/README.md)
@@ -21,11 +21,11 @@ experiments/
 ## Filing a run
 
 `run_experiment` writes its CSV/JSON directly into `--output-dir`, which
-defaults to `results/fixed_depth/` or `results/timed/` based on `--search` —
+defaults to `results/phase1-heuristics/` or `results/phase1-heuristics/` based on `--search` —
 so, unlike the legacy CLI, there's no separate "move it into place"
 step for experiments started with a correct `--output-dir` from the start.
 Point `--output-dir` at a more specific subfolder (e.g.
-`experiments/results/fixed_depth/h0-vs-h1/`) when you want a set of runs
+`experiments/results/phase1-heuristics/h0-vs-h1/`) when you want a set of runs
 grouped together for a specific comparison; `tools/summarize_experiment.py`
 matches files by their JSON metadata (heuristic, search config, seed set),
 not by directory location.
@@ -110,13 +110,13 @@ four features from one row table), so it should reach the greatest depth of
 any heuristic under budget — the direct test of whether depth or evaluation
 quality dominates here.
 
-See [`../ROADMAP.md`](../ROADMAP.md) for what's next (H4+, that per-move
+See [`../ROADMAP.md`](../docs/ROADMAP.md) for what's next (H4+, that per-move
 instrumentation, a generic weight optimizer, parallelism, etc.).
 
 ## N1: the first learned evaluator (headline result)
 
 Trained by afterstate temporal-difference learning over 1M self-play games
-(5.5 hours, single-threaded). See [`../docs/ntuple-learning.md`](../docs/ntuple-learning.md).
+(5.5 hours, single-threaded). See [`../docs/phase3-td-learning.md`](../docs/phase3-td-learning.md).
 
 | Evaluator | Score | n | Search used | Max tile |
 |---|---:|---:|---|---|
@@ -134,7 +134,7 @@ Trained by afterstate temporal-difference learning over 1M self-play games
 > a real confidence interval. Every H-series figure is n=3 or n=10, which at
 > this game's variance cannot separate configurations that differ by less than
 > roughly 2x — see the E4 entry in
-> [`../docs/ULTIMATE_AGENT_PROGRESS.md`](../docs/ULTIMATE_AGENT_PROGRESS.md).
+> [`../docs/experiment-log.md`](../docs/experiment-log.md).
 > The N1-vs-H gap is ~2x and survives; the H-internal ordering does not.
 >
 > The older N1 figures of 105,472 and 108,946 came from smaller samples of
@@ -182,9 +182,9 @@ post-spawn states. That is resolved by `EvaluationSemantics` on the
 `Evaluator` interface: depth 1 went from 14,262 to 102,861 on the same
 weights, and `--search fixed --depth 1` is now provably identical to 1-ply
 greedy. The pre-fix runs stay quarantined in
-`results/invalid_afterstate_mismatch/` as a record of the bug, not as data.
+`results/invalid-afterstate-mismatch/` as a record of the bug, not as data.
 
 Depth beyond 1 does **not** currently help this network (96,485 at depth 2,
 65,477 at depth 3). That turns out to depend on training budget rather than on
 the semantics fix, and is the subject of an open experiment — see
-[`../docs/ULTIMATE_AGENT_PROGRESS.md`](../docs/ULTIMATE_AGENT_PROGRESS.md).
+[`../docs/experiment-log.md`](../docs/experiment-log.md).

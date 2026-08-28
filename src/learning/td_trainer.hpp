@@ -2,6 +2,7 @@
 
 #include "core/board.hpp"
 #include "learning/ntuple_network.hpp"
+#include "learning/position_store.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -57,6 +58,25 @@ struct TrainConfig {
     // when not resuming (resuming would erase the loaded weights).
     double optimistic_initial_value{0.0};
 
+    // TD(lambda): blend the 1-step bootstrap with the actual multi-step return.
+    //
+    //   G_t = r_{t+1} + (1-lambda) * V(s'_{t+1}) + lambda * G_{t+1},   G_terminal = 0
+    //
+    // lambda = 0 recovers plain TD(0) exactly (the current behaviour);
+    // lambda = 1 is the full Monte-Carlo return. Published strong 2048 networks
+    // use lambda = 0.5, which this project has never tried.
+    //
+    // Why it is not just backward replay in another guise — a mistake I made
+    // when first dismissing it. Backward replay changes the ORDER updates are
+    // applied in, so each target still looks exactly one step ahead. TD(lambda)
+    // changes the TARGET itself: it averages returns over many future steps, so
+    // credit for a good move reaches back across a whole trajectory rather than
+    // seeping one state per episode. Different mechanism, different failure
+    // modes.
+    //
+    // Requires the episode to be buffered, so it forces the backward path on.
+    double td_lambda{0.0};
+
     // Apply an episode's updates in reverse (last afterstate first) once the
     // game has ended, instead of one move behind as the game is played.
     //
@@ -69,7 +89,7 @@ struct TrainConfig {
     //
     // This targets a measured defect: every network trained here overvalues
     // the last fifth of a game by roughly 4x (see E8 in
-    // docs/ULTIMATE_AGENT_PROGRESS.md). Costs one Board plus one reward per
+    // docs/experiment-log.md). Costs one Board plus one reward per
     // move of buffering, reused across episodes.
     bool backward_updates{false};
 
@@ -89,6 +109,32 @@ struct TrainConfig {
     // earlier in the same game would be stale — a hazard that does not exist
     // when weights are frozen for evaluation.
     std::uint32_t training_search_depth{1};
+
+    // Fit the network directly to values a DEEP SEARCH produced, instead of
+    // (or before) TD self-play. Empty disables it.
+    //
+    // Ordinary training bootstraps V from its own 1-ply estimates. Distillation
+    // instead regresses V onto what depth-4 expectimax concluded, which is a
+    // different signal rather than another feature. Searching during training
+    // cost 34x and gained nothing, so the search is done offline once and the
+    // answers replayed here for free.
+    std::vector<ValuedPosition> distill_targets;
+    std::uint64_t distill_passes{1};
+
+    // Start this fraction of episodes from a collected late-game position
+    // instead of an empty board. 0 keeps ordinary self-play.
+    //
+    // This targets the measured cause of the score ceiling. An autopsy of 40
+    // depth-4 games found 38 died having **never assembled a second 16384** —
+    // so the deciding skill is holding a 16384 and rebuilding beneath it, and
+    // 1-ply self-play almost never reaches that regime (16384 in 54% of games,
+    // 32768 in 0%). Seeding changes WHICH states are updated, which is exactly
+    // what simply training longer does not do.
+    //
+    // Keep it below 1.0: episodes from an empty board are what preserve the
+    // early- and mid-game skill the agent already has.
+    double seed_position_fraction{0.0};
+    std::vector<Board> seed_positions;
 
     // Where to read/write temporal-coherence accumulators, so training can be
     // extended across runs. Empty means do not persist (TC starts fresh).

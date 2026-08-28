@@ -2,7 +2,7 @@
 
 These 22 runs were produced before the bug in E21 was found, and **none of them
 measure what their filenames claim**. Kept as evidence of the bug's size and
-shape; deliberately held outside `n_series/` so no analysis folds them in.
+shape; deliberately held outside `phase3-learning/` so no analysis folds them in.
 
 ## The bug
 
@@ -25,7 +25,7 @@ overestimates the endgame by ~5.9x, so terminal positions scored around
 The bug is unreachable at depth 1: with afterstate semantics the search never
 expands a spawn, so it never evaluates a post-spawn board and never reaches a
 terminal node. **Every depth-1 result remains valid**, which is why all the
-training-method conclusions in `ULTIMATE_AGENT_PROGRESS.md` survive unchanged.
+training-method conclusions in `experiment-log.md` survive unchanged.
 Only depth >= 2 runs are quarantined here.
 
 ## The magnitude

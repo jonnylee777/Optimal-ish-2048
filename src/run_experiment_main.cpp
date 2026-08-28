@@ -1,6 +1,6 @@
 // Standardized experiment runner. Flag-based configuration keeps heuristic
 // choice, weight overrides, and search configuration independent instead of
-// coupling them into one opaque policy name — see docs/experiment-taxonomy.md.
+// coupling them into one opaque policy name — see docs/phase1-heuristics.md.
 #include "agents/search_agent.hpp"
 #include "evaluation/baseline_heuristic.hpp"
 #include "evaluation/h0_heuristic.hpp"
@@ -175,7 +175,7 @@ int run(
     if (config.symmetry && !evaluator.is_rotation_invariant()) {
         throw std::invalid_argument(
             evaluator_type + " is not rotation-invariant; --symmetry on is unsafe for it "
-            "(see Evaluator::is_rotation_invariant in docs/experiment-taxonomy.md)");
+            "(see Evaluator::is_rotation_invariant in docs/phase1-heuristics.md)");
     }
 
     const a2048::ExpectimaxOptions options{

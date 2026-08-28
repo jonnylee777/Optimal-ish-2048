@@ -45,13 +45,13 @@
 
 ## Source result files
 
-- adaptive, 250 ms/move, seeds 20500-20502, `H0`: [H0_timed_depth8_seeds20500-20502_20260823T190313758Z.json](../results/timed/H0_timed_depth8_seeds20500-20502_20260823T190313758Z.json)
-- adaptive, 250 ms/move, seeds 20500-20502, `H1`: [H1_timed_depth8_seeds20500-20502_20260823T070852857Z.json](../results/timed/H1_timed_depth8_seeds20500-20502_20260823T070852857Z.json)
-- adaptive, 250 ms/move, seeds 20500-20502, `H2`: [H2_timed_depth8_seeds20500-20502_20260823T194906740Z.json](../results/timed/H2_timed_depth8_seeds20500-20502_20260823T194906740Z.json)
-- adaptive, 250 ms/move, seeds 20500-20502, `H3`: [H3_timed_depth8_seeds20500-20502_20260823T203041683Z.json](../results/timed/H3_timed_depth8_seeds20500-20502_20260823T203041683Z.json)
-- adaptive, 250 ms/move, seeds 20500-20502, `H4`: [H4_timed_depth8_seeds20500-20502_20260823T205752327Z.json](../results/timed/H4_timed_depth8_seeds20500-20502_20260823T205752327Z.json)
-- depth 4, exact, seeds 20000-20009, `H0`: [H0_fixed_depth4_seeds20000-20009_20260823T190202584Z.json](../results/fixed_depth/H0_fixed_depth4_seeds20000-20009_20260823T190202584Z.json)
-- depth 4, exact, seeds 20000-20009, `H1`: [H1_fixed_depth4_seeds20000-20009_20260823T053550134Z.json](../results/fixed_depth/H1_fixed_depth4_seeds20000-20009_20260823T053550134Z.json)
-- depth 4, exact, seeds 20000-20009, `H2`: [H2_fixed_depth4_seeds20000-20009_20260823T055116344Z.json](../results/fixed_depth/H2_fixed_depth4_seeds20000-20009_20260823T055116344Z.json)
-- depth 4, exact, seeds 20000-20009, `H3`: [H3_fixed_depth4_seeds20000-20009_20260823T061807190Z.json](../results/fixed_depth/H3_fixed_depth4_seeds20000-20009_20260823T061807190Z.json)
-- depth 4, exact, seeds 20000-20009, `H4`: [H4_fixed_depth4_seeds20000-20009_20260823T184955535Z.json](../results/fixed_depth/H4_fixed_depth4_seeds20000-20009_20260823T184955535Z.json)
+- adaptive, 250 ms/move, seeds 20500-20502, `H0`: [H0_timed_depth8_seeds20500-20502_20260823T190313758Z.json](../results/phase1-heuristics/H0_timed_depth8_seeds20500-20502_20260823T190313758Z.json)
+- adaptive, 250 ms/move, seeds 20500-20502, `H1`: [H1_timed_depth8_seeds20500-20502_20260823T070852857Z.json](../results/phase1-heuristics/H1_timed_depth8_seeds20500-20502_20260823T070852857Z.json)
+- adaptive, 250 ms/move, seeds 20500-20502, `H2`: [H2_timed_depth8_seeds20500-20502_20260823T194906740Z.json](../results/phase1-heuristics/H2_timed_depth8_seeds20500-20502_20260823T194906740Z.json)
+- adaptive, 250 ms/move, seeds 20500-20502, `H3`: [H3_timed_depth8_seeds20500-20502_20260823T203041683Z.json](../results/phase1-heuristics/H3_timed_depth8_seeds20500-20502_20260823T203041683Z.json)
+- adaptive, 250 ms/move, seeds 20500-20502, `H4`: [H4_timed_depth8_seeds20500-20502_20260823T205752327Z.json](../results/phase1-heuristics/H4_timed_depth8_seeds20500-20502_20260823T205752327Z.json)
+- depth 4, exact, seeds 20000-20009, `H0`: [H0_fixed_depth4_seeds20000-20009_20260823T190202584Z.json](../results/phase1-heuristics/H0_fixed_depth4_seeds20000-20009_20260823T190202584Z.json)
+- depth 4, exact, seeds 20000-20009, `H1`: [H1_fixed_depth4_seeds20000-20009_20260823T053550134Z.json](../results/phase1-heuristics/H1_fixed_depth4_seeds20000-20009_20260823T053550134Z.json)
+- depth 4, exact, seeds 20000-20009, `H2`: [H2_fixed_depth4_seeds20000-20009_20260823T055116344Z.json](../results/phase1-heuristics/H2_fixed_depth4_seeds20000-20009_20260823T055116344Z.json)
+- depth 4, exact, seeds 20000-20009, `H3`: [H3_fixed_depth4_seeds20000-20009_20260823T061807190Z.json](../results/phase1-heuristics/H3_fixed_depth4_seeds20000-20009_20260823T061807190Z.json)
+- depth 4, exact, seeds 20000-20009, `H4`: [H4_fixed_depth4_seeds20000-20009_20260823T184955535Z.json](../results/phase1-heuristics/H4_fixed_depth4_seeds20000-20009_20260823T184955535Z.json)

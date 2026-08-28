@@ -3,7 +3,7 @@
 
 Adapted from the legacy tools/generate_comparison_report.py — reuses its
 matched-seed paired-comparison approach, pointed at the standardized
-run_experiment schema (see docs/experiment-taxonomy.md) instead of the
+run_experiment schema (see docs/phase1-heuristics.md) instead of the
 milestone-named legacy schema.
 """
 
@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=None,
         help="Directory to scan for *.json result files (repeatable). "
-        "Defaults to experiments/results/fixed_depth and experiments/results/timed.",
+        "Defaults to experiments/results/phase1-heuristics and experiments/results/phase1-heuristics.",
     )
     parser.add_argument("--title", default="Experiment summary")
     parser.add_argument("--output", type=Path, required=True)
@@ -146,8 +146,8 @@ def generate_report(title: str, results: list[dict[str, Any]], output_dir: Path)
 def main() -> int:
     args = parse_args()
     directories = args.results_dir or [
-        Path("experiments/results/fixed_depth"),
-        Path("experiments/results/timed"),
+        Path("experiments/results/phase1-heuristics"),
+        Path("experiments/results/phase1-heuristics"),
     ]
     results = load_results(directories)
     args.output.parent.mkdir(parents=True, exist_ok=True)

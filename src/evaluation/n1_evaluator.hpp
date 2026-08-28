@@ -38,7 +38,7 @@ public:
     // V(afterstate) <- reward_of_next_move + V(next afterstate), so it answers
     // "expected future score from this post-move, pre-spawn board". Evaluating
     // it on post-spawn states is not a well-defined quantity and collapses
-    // playing strength — see docs/ntuple-learning.md.
+    // playing strength — see docs/phase3-td-learning.md.
     [[nodiscard]] EvaluationSemantics semantics() const noexcept override {
         return EvaluationSemantics::afterstate;
     }

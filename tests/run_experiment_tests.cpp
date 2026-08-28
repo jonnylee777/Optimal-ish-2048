@@ -137,7 +137,11 @@ void test_full_valid_fixed_config() {
     CHECK(!config.transposition_table);
     CHECK(config.run_config.game_count == 10);
     CHECK(config.quiet);
-    CHECK(config.output_dir == std::filesystem::path("experiments/results/fixed_depth"));
+    // Results are filed by METHODOLOGY (hand-written vs learned), not by search
+    // regime. This config uses H0, so it lands in the heuristics directory
+    // whether it runs fixed-depth or timed -- comparing the two regimes for one
+    // agent is the point, so they belong together.
+    CHECK(config.output_dir == std::filesystem::path("experiments/results/phase1-heuristics"));
 }
 
 void test_metrics_worst_score_median_moves_and_distribution() {

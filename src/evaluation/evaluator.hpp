@@ -52,7 +52,7 @@ public:
     // producing NaN.
     //
     // Getting this wrong cost this project a factor of 1.7 in playing strength
-    // at depth 3 -- see E21 in docs/ULTIMATE_AGENT_PROGRESS.md.
+    // at depth 3 -- see E21 in docs/experiment-log.md.
     [[nodiscard]] virtual double terminal_value() const noexcept {
         return -1e15;
     }

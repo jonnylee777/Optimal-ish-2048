@@ -8,7 +8,7 @@ namespace adversarial_2048 {
 // nneonneo heuristic described in reference.md — "bonuses for open squares
 // and for having large values on the edge" — before monotonicity/smoothness
 // were introduced. Exists as a genuine floor below H1 (BaselineHeuristic),
-// not an arbitrary toy. See docs/experiment-taxonomy.md.
+// not an arbitrary toy. See docs/phase1-heuristics.md.
 struct H0Features {
     double empty_cells{};
     double edge_max_bonus{};

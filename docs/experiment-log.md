@@ -41,6 +41,9 @@ Kept, rejected, and pending — the short version. Details in the E-entries belo
 | E23 | Post-fix depth sweep + training plateau | ⭐ **356,178 at depth 4** | 1.0M→1.2M games gains nothing measurable |
 | E24 | Search speedups | symmetry ❌ / parallel ✅ | symmetry 60% slower; parallel 1.68x, identical play |
 | E25 | Global features + depth 4 | ❌ **substitutes** | −6.8% (p=0.08); global wins at depth 1, ties at depth 4 |
+| E26 | Endgame autopsy | ⭐ **DIAGNOSIS** | 38/40 deaths = never built a 2nd 16384; tablebase killed (1% coverage) |
+| E27 | Tile downgrading (relative indexing) | ❌ **REJECT** | **49,638 vs 135,043** — destroys scale knowledge |
+| E28 | Endgame-seeded training | ⏸ running | 14,351 collected positions; control = 242,440 |
 | E14 | Depth-vs-budget along one axis | ✅ | budget +30% per doubling; depth gain 16.6% → 11.7% |
 
 ### Strongest agent — FINAL
@@ -1548,6 +1551,125 @@ the current one does, which is exactly what run 2 tests.
 
 ---
 
+## E26 — Endgame autopsy: 95% of games die the same way  ⭐ DIAGNOSIS
+
+Score is set almost entirely by the highest tile reached (depth 4, n=60):
+8192 -> 162,320 · **16384 -> 355,226 (93%)** · **32768 -> 576,688 (3%)**.
+Reaching 500,000 means reaching 32768 routinely.
+
+Achievement rates by depth, same weights:
+
+| Depth | 16384 | 32768 |
+|---:|---:|---:|
+| 1 | 54% | **0%** |
+| 2 | 86% | 0% |
+| 3 | 94% | 2% |
+| 4 | **97%** | **3%** |
+
+**16384 is saturated at 97% by depth 4; 32768 moves for nothing tried.**
+
+So before proposing fixes, I replayed 40 depth-4 games and classified how each
+one ended (`scratchpad/endgame_autopsy.cpp`):
+
+| Cause of death | Games |
+|---|---:|
+| **Never assembled a second 16384** | **38 / 40** |
+| Died with the large-tile chain broken | 2 / 40 |
+| Died jammed, chain intact | 0 |
+| Died one merge short (mergeable 16384 pair) | 0 |
+
+Only **2 of 40 games ever held two 16384s at once.**
+
+**The agent is not losing on endgame tactics.** It does not die jammed, does not
+die a merge short, does not lose the snake. It reaches 16384 and then never
+rebuilds the second one — a ~100-move strategic task, far beyond any search
+horizon, so it can only come from the value function.
+
+### This killed the endgame tablebase on two independent grounds
+
+The tablebase was originally abandoned because the agent was too weak to reach
+the affordable tables (`docs/phase2-endgame-tablebase.md`: *"our strongest agent reaches 4096 —
+every lookup would miss"*). That premise **had** become obsolete, which is why
+it was worth re-examining. But the same autopsy measured the coverage gate:
+
+**Only 1% of late-game moves have >=5 large tiles locked with <=10 free cells** —
+the shape a `Formation` covers, against a 20% threshold. And more fundamentally,
+a tablebase gives *exact endgame tactics*, which is precisely what is **not**
+failing.
+
+Two hours of diagnosis avoided days of building a 2.5 GB table for a problem we
+do not have.
+
+---
+
+## E27 — Tile downgrading (relative indexing)  ❌ REJECT, decisively
+
+**Hypothesis.** The agent is excellent at building up to 16384 (97% of games).
+Rebuilding beneath a locked 16384 is the same task one scale higher, but the
+network indexes raw exponents, so `{16384,8192,4096}` and `{2048,1024,512}`
+occupy unrelated table entries and none of that competence transfers. Indexing
+relative to the board maximum would share it by construction — reaching the rare
+regime **without needing to visit it**.
+
+**Implementation.** `IndexingMode::relative` shifts every exponent so the board
+max maps to 15, clamping at 0, with empty cells preserved. Recorded in the
+weight header so a file can never be read under the wrong interpretation. Paired
+with `--global-features` (indexed by `empty_count x max_exponent`) to restore
+the absolute scale normalisation discards.
+
+**Result at 100k games**, otherwise the best configuration:
+
+| Configuration | Score | Max tile |
+|---|---:|---|
+| baseline (`large` + TC + backward) | **135,043** | 16384 |
+| + relative indexing + global features | **49,638** | 8192 |
+
+**A 2.7x collapse.** Not marginal, not budget-dependent — it never even reached
+16384.
+
+**Why.** Relative indexing makes every board look the same shape regardless of
+scale, so the network loses the ability to tell an early position from a late
+one. One 256-entry global feature cannot carry what 83.9M weights just gave up.
+It reached the rare regime by destroying the network's knowledge of *which*
+regime it was in.
+
+A test caught a wrong assumption of mine along the way: I asserted that under
+*absolute* indexing the two scaled boards would share nothing (`value == 0`).
+They do share — each tuple expands to 8 dihedral orderings, and some land
+entirely on cells empty in both boards, hitting the same all-zero entry. The
+property that matters is that absolute does not make them *equal*; the test now
+says that instead.
+
+---
+
+## E28 — Endgame-seeded training  ⏸ RUNNING
+
+The remaining candidate, and the only one addressing E26's measured cause.
+
+Training is 1-ply self-play, which reaches 16384 in 54% of games and 32768 in
+**0%**. The deployed agent plays at depth 4 and lives at 97%/3%. So the value
+function receives almost no updates in the regime that decides every game — and
+this is exactly what "just train longer" cannot fix, since 1M -> 2M games gained
+4.7% at depth 1 and nothing at depth 4.
+
+**Method.** Collect late-game positions from *deployed* (depth-4) play, then
+start half of all training episodes from them. Changes **which** states are
+updated rather than how many. `src/learning/position_store.{hpp,cpp}` plus
+`--seed-positions` / `--seed-fraction`.
+
+Collected **14,351 positions** (max tile >= 8192, every 25th qualifying board
+across 40 depth-4 games, sampled to avoid 358k near-duplicates).
+
+**Design is a clean single-variable test.** Treatment resumes
+`n5_large_1M.bin` for 100k games at `alpha=0.1`, `seed=77000000`. The control is
+`n9_ext_1M1` — the *same* resume, seed, alpha and game count, run earlier
+without seeding — which scored **242,440** at depth 1. The only difference is
+where episodes start.
+
+Primary metric is `achievement_rate_32768` at depth 4, not mean score.
+
+---
+
 ## E4 — The entire H-series ranking is statistically unestablished  ⚠️ METHODOLOGY
 
 Checked while looking for a trustworthy baseline. **Every** recorded H-series
@@ -1706,5 +1828,5 @@ byte-identical to the standalone 100k fixed-reward run and renamed
 `n2_rewardfix_100k.bin`. A weight file whose name overstates its training
 budget is exactly the kind of thing that silently corrupts a later comparison.
 - Invalid pre-fix N1 search runs quarantined in
-  `experiments/results/invalid_afterstate_mismatch/` with a README, so
+  `experiments/results/invalid-afterstate-mismatch/` with a README, so
   `summarize_experiment.py` cannot fold them into comparisons.

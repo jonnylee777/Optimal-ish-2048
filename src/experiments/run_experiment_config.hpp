@@ -12,7 +12,7 @@
 namespace adversarial_2048 {
 
 // Flag-based configuration for the standardized `run_experiment` CLI.
-// See docs/experiment-taxonomy.md. Deliberately keeps heuristic choice,
+// See docs/phase1-heuristics.md. Deliberately keeps heuristic choice,
 // weight overrides, and search configuration as independent fields so no
 // single flag can silently couple them together.
 enum class HeuristicChoice { h0, h1, h2, h3, h4, h5, n1 };

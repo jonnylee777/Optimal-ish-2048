@@ -10,7 +10,7 @@ namespace adversarial_2048 {
 // H5: a faithful port of the reference project's SEARCH evaluator — not its
 // tablebase — from game-difficulty/2048EndgameTablebase
 // (`native_core/src/AIPlayer.cpp`: `diffs_evaluation_func`,
-// `init_evaluate_tables`, `AIPlayer::evaluate`). See docs/tablebase.md.
+// `init_evaluate_tables`, `AIPlayer::evaluate`). See docs/phase2-endgame-tablebase.md.
 //
 // Two things make this different from H0-H4:
 //

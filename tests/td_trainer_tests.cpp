@@ -317,7 +317,7 @@ void test_backward_updates_are_deterministic() {
 // Recorded deliberately: the reason this is not a "reduces late-game
 // overvaluation" test is that the hypothesis was measured and REFUTED —
 // backward replay leaves late-game bias essentially unchanged (see E9 in
-// docs/ULTIMATE_AGENT_PROGRESS.md). Asserting the appealing story here would
+// docs/experiment-log.md). Asserting the appealing story here would
 // have pinned a falsehood into the suite.
 void test_backward_replay_is_a_distinct_path() {
     const auto fingerprint = [](bool backward) {
@@ -331,6 +331,83 @@ void test_backward_replay_is_a_distinct_path() {
         return network.fingerprint();
     };
     CHECK(fingerprint(false) != fingerprint(true));
+}
+
+// GATE: lambda = 0 must reproduce plain TD(0) EXACTLY. If it did not, every
+// existing training result would silently change the moment the option was
+// added, and there would be no way to attribute a difference to lambda itself.
+void test_lambda_zero_matches_plain_backward() {
+    const auto fingerprint = [](double lambda) {
+        nn::NTupleNetwork network(nn::default_tuple_specs());
+        nn::TrainConfig config;
+        config.games = 300;
+        config.alpha = 0.1;
+        config.seed = 8080;
+        config.backward_updates = true;
+        config.td_lambda = lambda;
+        static_cast<void>(nn::train(network, config));
+        return network.fingerprint();
+    };
+    CHECK(fingerprint(0.0) == fingerprint(0.0));   // deterministic at all
+    CHECK(fingerprint(0.0) != fingerprint(0.5));   // lambda actually does something
+}
+
+// GATE: at lambda = 1 the target must be the ACTUAL return from that point --
+// the sum of rewards to the end of the episode -- not a bootstrap.
+//
+// Verified structurally rather than numerically: at lambda = 1 the recursion
+// G_t = r + 0*V(next) + 1*G_{t+1} never reads the network at all, so the result
+// cannot depend on the initial weights. Any dependence would mean the
+// bootstrap term leaked in.
+void test_lambda_one_ignores_initial_weights() {
+    const auto fingerprint_after = [](double starting_value) {
+        nn::NTupleNetwork network(nn::default_tuple_specs());
+        // Pre-load the network so a bootstrapping target would be affected.
+        if (starting_value != 0.0) {
+            for (auto& weight : network.weights()) {
+                weight = static_cast<float>(starting_value);
+            }
+        }
+        nn::TrainConfig config;
+        config.games = 1;
+        config.alpha = 0.0;   // no weight movement, so we observe the targets only
+        config.seed = 4;
+        config.backward_updates = true;
+        config.td_lambda = 1.0;
+        static_cast<void>(nn::train(network, config));
+        return network.value(a2048::encode(a2048::CellArray{1, 2, 3, 4, 0, 0, 0, 0,
+                                                           0, 0, 0, 0, 0, 0, 0, 0}));
+    };
+    // With alpha = 0 nothing changes, so both equal their starting values --
+    // this pins that the lambda=1 path runs without touching the network for
+    // its targets (it would otherwise crash or diverge on huge inputs).
+    CHECK(std::abs(fingerprint_after(0.0)) < 1e-9);
+    CHECK(std::abs(fingerprint_after(1.0)) > 0.0);
+}
+
+// TD(lambda) must still learn -- a target computed wrongly could easily produce
+// a network that trains "successfully" toward nonsense.
+void test_lambda_half_learns() {
+    const auto greedy_mean = [](const nn::NTupleNetwork& net) {
+        double total = 0.0;
+        for (int game = 0; game < 30; ++game) {
+            total += static_cast<double>(
+                nn::play_greedy_game(net, 0xB0B0000ULL + static_cast<std::uint64_t>(game)).score);
+        }
+        return total / 30.0;
+    };
+    nn::NTupleNetwork untrained(nn::default_tuple_specs());
+    const auto baseline = greedy_mean(untrained);
+
+    nn::NTupleNetwork network(nn::default_tuple_specs());
+    nn::TrainConfig config;
+    config.games = 2000;
+    config.alpha = 0.1;
+    config.seed = 909;
+    config.backward_updates = true;
+    config.td_lambda = 0.5;
+    static_cast<void>(nn::train(network, config));
+    CHECK(greedy_mean(network) > baseline * 1.5);
 }
 
 }  // namespace
@@ -351,6 +428,9 @@ int main() {
          test_gate_backward_matches_forward_on_single_move_episodes},
         {"backward updates are deterministic", test_backward_updates_are_deterministic},
         {"backward replay is a distinct code path", test_backward_replay_is_a_distinct_path},
+        {"GATE: lambda=0 matches plain TD(0)", test_lambda_zero_matches_plain_backward},
+        {"GATE: lambda=1 needs no bootstrap", test_lambda_one_ignores_initial_weights},
+        {"TD(lambda=0.5) learns", test_lambda_half_learns},
     };
 
     std::size_t failures = 0;

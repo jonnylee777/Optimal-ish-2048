@@ -271,9 +271,15 @@ RunExperimentConfig parse_run_experiment_args(const std::vector<std::string>& ar
     config.seed_set_label = resolved.label;
 
     if (config.output_dir.empty()) {
-        config.output_dir = config.search == SearchMode::fixed
-            ? std::filesystem::path("experiments/results/fixed_depth")
-            : std::filesystem::path("experiments/results/timed");
+        // Results are filed by METHODOLOGY, not by search regime: the H-series
+        // (hand-written heuristics) and the N-series (learned networks) are
+        // different experiments that happen to share this harness, and mixing
+        // them in one directory invites comparing across seed sets. Both
+        // regimes for one methodology belong together, since the whole point of
+        // running fixed-depth and timed is to compare them for the same agent.
+        config.output_dir = config.heuristic == HeuristicChoice::n1
+            ? std::filesystem::path("experiments/results/phase3-learning")
+            : std::filesystem::path("experiments/results/phase1-heuristics");
     }
 
     return config;

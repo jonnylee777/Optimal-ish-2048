@@ -43,6 +43,8 @@ add_library(adversarial_2048_runtime
     src/learning/ntuple_network.cpp
     src/learning/td_trainer.cpp
     src/learning/temporal_coherence.cpp
+    src/learning/position_store.cpp
+    src/learning/neural_network.cpp
     src/search/parallel_expectimax.cpp
     src/evaluation/ensemble_evaluator.cpp
     src/optimization/baseline_optimizer.cpp

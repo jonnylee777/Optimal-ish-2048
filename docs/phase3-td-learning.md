@@ -22,7 +22,7 @@ Both are stronger than anything hand-crafted. Only one fits this machine
 
 The tablebase wall is absolute — the finished tables simply don't fit. The
 n-tuple wall is only at the *top* of a ladder whose lower rungs already beat
-us. See [`tablebase.md`](tablebase.md) for the tablebase analysis.
+us. See [`phase2-endgame-tablebase.md`](phase2-endgame-tablebase.md) for the tablebase analysis.
 
 Published progression, memory recomputed for float32 weights:
 
@@ -141,7 +141,7 @@ learning curve measures generalization rather than memorization.
 
 Two distinct bugs made N1 collapse under search. Both are fixed. Full
 narrative and statistics in
-[`ULTIMATE_AGENT_PROGRESS.md`](ULTIMATE_AGENT_PROGRESS.md); the summary:
+[`experiment-log.md`](experiment-log.md); the summary:
 
 ### Bug 1 — leaf-semantics mismatch
 
@@ -215,7 +215,7 @@ The same +28k to +31k late-game bias appears in every network measured,
 regardless of training budget or reward index. The value function does not know
 the game is about to end. This is the largest known defect in the current
 agent — details and refuted explanations in
-[`ULTIMATE_AGENT_PROGRESS.md`](ULTIMATE_AGENT_PROGRESS.md).
+[`experiment-log.md`](experiment-log.md).
 
 ## Training options beyond plain TD
 
@@ -252,7 +252,7 @@ train_ntuple --temporal-coherence --alpha 1.0 --backward-updates
 
 Compounding is selective, and the pattern is not guessable — measure before
 combining (see E13 in
-[`ULTIMATE_AGENT_PROGRESS.md`](ULTIMATE_AGENT_PROGRESS.md)):
+[`experiment-log.md`](experiment-log.md)):
 
 | On top of TC at `alpha=1.0` | Effect |
 |---|---:|

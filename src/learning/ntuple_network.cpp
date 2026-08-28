@@ -22,6 +22,12 @@ constexpr std::uint32_t kStagedFormatVersion = 2;
 // file produced before this change remains valid.
 constexpr std::uint32_t kFlaggedFormatVersion = 3;
 constexpr std::uint32_t kFlagGlobalFeatures = 1U << 0U;
+constexpr std::uint32_t kFlagRelativeIndexing = 1U << 1U;
+// Upper byte carries the stage split point. Zero means "not recorded", which
+// maps to the historical default of 10, so v3 files written before this change
+// still load with their original meaning.
+constexpr std::uint32_t kFlagStructuralFeatures = 1U << 2U;
+constexpr std::uint32_t kStageBaseShift = 8U;
 
 // The 8 dihedral symmetries of the square, as (row, column) maps. A tuple's
 // symmetric ordering is produced by applying one of these to each of its base
@@ -158,18 +164,18 @@ std::vector<std::string> tuple_configuration_names() {
     return {"default", "large", "xlarge"};
 }
 
-std::size_t stage_of(Board board, std::size_t stage_count) noexcept {
+std::size_t stage_of(Board board, std::size_t stage_count,
+                     std::uint8_t base_exponent) noexcept {
     if (stage_count <= 1) {
         return 0;
     }
     // Max exponent never decreases during a game, so a game moves forward
     // through stages and never back.
-    constexpr std::uint8_t kFirstStagedExponent = 10;  // 1024 and below share stage 0
     const auto exponent = max_exponent(board);
-    if (exponent <= kFirstStagedExponent) {
+    if (exponent < base_exponent) {
         return 0;
     }
-    const auto stage = static_cast<std::size_t>(exponent - kFirstStagedExponent);
+    const auto stage = static_cast<std::size_t>(exponent - base_exponent) + 1U;
     return stage < stage_count ? stage : stage_count - 1;
 }
 
@@ -182,9 +188,70 @@ std::size_t global_feature_index(Board board) noexcept {
     return empties * 16U + exponent;
 }
 
+// Shifts every exponent so the board maximum becomes 15, clamping at 0. A board
+// holding {16384, 8192, 4096} and one holding {2048, 1024, 512} then produce
+// identical indices, so experience transfers across scales.
+[[nodiscard]] std::uint64_t relative_packed(std::uint64_t clamped) noexcept {
+    std::uint64_t maximum = 0;
+    for (std::size_t cell = 0; cell < kCellCount; ++cell) {
+        maximum = std::max(maximum, (clamped >> (4U * cell)) & 0xFULL);
+    }
+    if (maximum == 0) {
+        return clamped;  // empty board: nothing to normalise against
+    }
+    const auto shift = 15ULL - maximum;
+    std::uint64_t result = 0;
+    for (std::size_t cell = 0; cell < kCellCount; ++cell) {
+        const auto exponent = (clamped >> (4U * cell)) & 0xFULL;
+        // Empty stays empty; occupied cells shift up toward 15 and saturate at
+        // 1 so a tile never becomes indistinguishable from an empty cell.
+        const auto mapped = exponent == 0 ? 0ULL : std::min(15ULL, exponent + shift);
+        result |= mapped << (4U * cell);
+    }
+    return result;
+}
+
+std::size_t structural_feature_index(Board board) noexcept {
+    const auto cells = decode(board);
+
+    // How far the descending order holds along the boustrophedon path. This is
+    // the "snake" every strong 2048 policy maintains, and no tuple can see it
+    // because it spans the whole board.
+    static constexpr std::array<std::size_t, 16> kSnake{
+        0, 1, 2, 3, 7, 6, 5, 4, 8, 9, 10, 11, 15, 14, 13, 12};
+    std::size_t run = 0;
+    std::uint8_t previous = 16;  // above any real exponent
+    for (const auto cell : kSnake) {
+        const auto exponent = cells[cell];
+        if (exponent == 0 || exponent > previous) {
+            break;
+        }
+        previous = exponent;
+        ++run;
+    }
+    if (run > 15) {
+        run = 15;
+    }
+
+    // Is the largest tile in a corner? Losing the corner is how the snake
+    // collapses.
+    const auto peak = max_exponent(board);
+    const bool cornered = peak != 0 && (cells[0] == peak || cells[3] == peak ||
+                                        cells[12] == peak || cells[15] == peak);
+
+    auto empties = empty_count(board);
+    if (empties > 15) {
+        empties = 15;
+    }
+    return run * 32U + (cornered ? 16U : 0U) + empties;
+}
+
 NTupleNetwork::NTupleNetwork(std::vector<TupleSpec> specs, std::size_t stage_count,
-                             bool global_features)
-    : specs_(std::move(specs)), stage_count_(stage_count), global_features_(global_features) {
+                             bool global_features, IndexingMode indexing,
+                             std::uint8_t stage_base_exponent, bool structural_features)
+    : specs_(std::move(specs)), stage_count_(stage_count), global_features_(global_features),
+      indexing_(indexing), stage_base_exponent_(stage_base_exponent),
+      structural_features_(structural_features) {
     if (specs_.empty()) {
         throw std::invalid_argument("n-tuple network needs at least one tuple");
     }
@@ -254,12 +321,58 @@ NTupleNetwork::NTupleNetwork(std::vector<TupleSpec> specs, std::size_t stage_cou
         offset += kGlobalFeatureSize;
         ++active_weight_count_;
     }
+    structural_offset_ = offset;
+    if (structural_features_) {
+        offset += kStructuralFeatureSize;
+        ++active_weight_count_;
+    }
     stage_stride_ = offset;
     weights_.assign(offset * stage_count_, 0.0F);
 }
 
+std::uint64_t NTupleNetwork::indexed_packed(Board board) const noexcept {
+    const auto clamped = clamped_packed(board);
+    return indexing_ == IndexingMode::relative ? relative_packed(clamped) : clamped;
+}
+
 std::size_t NTupleNetwork::stage_offset(Board board) const noexcept {
-    return stage_count_ == 1 ? 0 : stage_of(board, stage_count_) * stage_stride_;
+    return stage_count_ == 1
+        ? 0
+        : stage_of(board, stage_count_, stage_base_exponent_) * stage_stride_;
+}
+
+std::size_t NTupleNetwork::tuple_weight_count() const noexcept {
+    return global_offset_;  // feature tables begin where the tuple LUTs end
+}
+
+void NTupleNetwork::adopt_tuple_weights(const NTupleNetwork& source) {
+    if (source.specs_.size() != specs_.size()) {
+        throw std::invalid_argument("adopt_tuple_weights: different tuple count");
+    }
+    for (std::size_t index = 0; index < specs_.size(); ++index) {
+        if (source.specs_[index].cells != specs_[index].cells) {
+            throw std::invalid_argument("adopt_tuple_weights: different tuple cells");
+        }
+    }
+    if (source.stage_count_ != stage_count_) {
+        throw std::invalid_argument("adopt_tuple_weights: different stage count");
+    }
+    if (source.indexing_ != indexing_) {
+        throw std::invalid_argument("adopt_tuple_weights: different indexing mode");
+    }
+    const auto span = std::min(source.tuple_weight_count(), tuple_weight_count());
+    for (std::size_t stage = 0; stage < stage_count_; ++stage) {
+        const auto* from = source.weights_.data() + stage * source.stage_stride_;
+        auto* to = weights_.data() + stage * stage_stride_;
+        std::copy(from, from + span, to);
+    }
+}
+
+void NTupleNetwork::replicate_stage_zero() {
+    for (std::size_t stage = 1; stage < stage_count_; ++stage) {
+        std::copy(weights_.begin(), weights_.begin() + static_cast<std::ptrdiff_t>(stage_stride_),
+                  weights_.begin() + static_cast<std::ptrdiff_t>(stage * stage_stride_));
+    }
 }
 
 std::size_t NTupleNetwork::index_of(
@@ -274,7 +387,7 @@ std::size_t NTupleNetwork::index_of(
 }
 
 double NTupleNetwork::value(Board board) const noexcept {
-    const auto packed = clamped_packed(board);
+    const auto packed = indexed_packed(board);
     const auto base = stage_offset(board);
     double total = 0.0;
     for (const auto& tuple : tuples_) {
@@ -287,11 +400,15 @@ double NTupleNetwork::value(Board board) const noexcept {
         total += static_cast<double>(
             weights_[base + global_offset_ + global_feature_index(board)]);
     }
+    if (structural_features_) {
+        total += static_cast<double>(
+            weights_[base + structural_offset_ + structural_feature_index(board)]);
+    }
     return total;
 }
 
 void NTupleNetwork::update(Board board, double per_weight_delta) noexcept {
-    const auto packed = clamped_packed(board);
+    const auto packed = indexed_packed(board);
     const auto base = stage_offset(board);
     const auto delta = static_cast<float>(per_weight_delta);
     for (const auto& tuple : tuples_) {
@@ -302,10 +419,13 @@ void NTupleNetwork::update(Board board, double per_weight_delta) noexcept {
     if (global_features_) {
         weights_[base + global_offset_ + global_feature_index(board)] += delta;
     }
+    if (structural_features_) {
+        weights_[base + structural_offset_ + structural_feature_index(board)] += delta;
+    }
 }
 
 void NTupleNetwork::active_indices(Board board, std::vector<std::size_t>& out) const {
-    const auto packed = clamped_packed(board);
+    const auto packed = indexed_packed(board);
     const auto base = stage_offset(board);
     out.clear();
     out.reserve(active_weight_count_);
@@ -316,6 +436,9 @@ void NTupleNetwork::active_indices(Board board, std::vector<std::size_t>& out) c
     }
     if (global_features_) {
         out.push_back(base + global_offset_ + global_feature_index(board));
+    }
+    if (structural_features_) {
+        out.push_back(base + structural_offset_ + structural_feature_index(board));
     }
 }
 
@@ -340,7 +463,10 @@ void NTupleNetwork::save(const std::filesystem::path& path) const {
         // weight file already on disk stays valid.
         // Write the OLDEST version that can express this network, so files stay
         // readable by anything that predates a feature it does not use.
-        const auto version = global_features_ ? kFlaggedFormatVersion
+        const auto needs_flags = global_features_ || structural_features_ ||
+                                 indexing_ == IndexingMode::relative ||
+                                 (stage_count_ > 1 && stage_base_exponent_ != 10);
+        const auto version = needs_flags ? kFlaggedFormatVersion
                            : stage_count_ > 1 ? kStagedFormatVersion
                                               : kFormatVersion;
         write_exact(stream, &version, sizeof(version));
@@ -349,7 +475,11 @@ void NTupleNetwork::save(const std::filesystem::path& path) const {
             write_exact(stream, &stages, sizeof(stages));
         }
         if (version >= kFlaggedFormatVersion) {
-            const std::uint32_t flags = global_features_ ? kFlagGlobalFeatures : 0U;
+            const std::uint32_t flags =
+                (global_features_ ? kFlagGlobalFeatures : 0U) |
+                (indexing_ == IndexingMode::relative ? kFlagRelativeIndexing : 0U) |
+                (structural_features_ ? kFlagStructuralFeatures : 0U) |
+                (static_cast<std::uint32_t>(stage_base_exponent_) << kStageBaseShift);
             write_exact(stream, &flags, sizeof(flags));
         }
 
@@ -382,6 +512,9 @@ struct HeaderInfo {
     std::vector<TupleSpec> specs;
     std::size_t stage_count{1};
     bool global_features{false};
+    IndexingMode indexing{IndexingMode::absolute};
+    std::uint8_t stage_base{10};
+    bool structural_features{false};
 };
 
 [[nodiscard]] HeaderInfo read_header_specs(
@@ -412,6 +545,11 @@ struct HeaderInfo {
         std::uint32_t flags = 0;
         read_exact(stream, &flags, sizeof(flags), path);
         info.global_features = (flags & kFlagGlobalFeatures) != 0U;
+        info.indexing = (flags & kFlagRelativeIndexing) != 0U ? IndexingMode::relative
+                                                             : IndexingMode::absolute;
+        info.structural_features = (flags & kFlagStructuralFeatures) != 0U;
+        const auto recorded = static_cast<std::uint8_t>((flags >> kStageBaseShift) & 0xFFU);
+        info.stage_base = recorded == 0 ? 10 : recorded;
     }
 
     std::uint32_t tuple_count = 0;
@@ -439,7 +577,8 @@ NTupleNetwork NTupleNetwork::load_from(const std::filesystem::path& path) {
     // ranges, tuple sizes), so a corrupt header cannot produce a live network.
     auto header = read_header_specs(stream, path);
     NTupleNetwork network(std::move(header.specs), header.stage_count,
-                          header.global_features);
+                          header.global_features, header.indexing, header.stage_base,
+                          header.structural_features);
 
     std::uint64_t weight_count = 0;
     read_exact(stream, &weight_count, sizeof(weight_count), path);
@@ -484,10 +623,21 @@ void NTupleNetwork::load(const std::filesystem::path& path) {
         file_stages = stages;
     }
     bool file_global = false;
+    bool file_global_flags_read = false;
+    auto file_indexing_read = IndexingMode::absolute;
     if (version >= kFlaggedFormatVersion) {
         std::uint32_t flags = 0;
         read_exact(stream, &flags, sizeof(flags), path);
         file_global = (flags & kFlagGlobalFeatures) != 0U;
+        file_indexing_read = (flags & kFlagRelativeIndexing) != 0U ? IndexingMode::relative
+                                                                  : IndexingMode::absolute;
+        file_global_flags_read = true;
+    }
+    const auto file_indexing = (version >= kFlaggedFormatVersion && file_global_flags_read)
+        ? file_indexing_read
+        : IndexingMode::absolute;
+    if (file_indexing != indexing_) {
+        throw std::runtime_error("weight file indexing mode does not match: " + path.string());
     }
     if (file_global != global_features_) {
         throw std::runtime_error("weight file global-feature setting does not match: " +
@@ -559,6 +709,15 @@ std::string NTupleNetwork::fingerprint() const {
     out << ",active=" << active_weight_count_;
     if (global_features_) {
         out << ",global";
+    }
+    if (structural_features_) {
+        out << ",structural";
+    }
+    if (indexing_ == IndexingMode::relative) {
+        out << ",relative";
+    }
+    if (stage_count_ > 1) {
+        out << ",stagebase=" << static_cast<int>(stage_base_exponent_);
     }
     // Only emitted when staged, so single-stage fingerprints stay byte-for-byte
     // what they were before staging existed and old experiment records remain

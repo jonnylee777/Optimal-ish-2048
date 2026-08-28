@@ -13,7 +13,7 @@ namespace adversarial_2048 {
 // a stability bonus, an adverse-stuck-state penalty, and a move-transition
 // penalty for displacing the anchored high-value prefix. Reuses
 // StructuralHeuristic's public feature functions rather than duplicating
-// them — legacy code is untouched. See docs/experiment-taxonomy.md.
+// them — legacy code is untouched. See docs/phase1-heuristics.md.
 struct H3Features {
     H2Features h2;
     double main_line{};

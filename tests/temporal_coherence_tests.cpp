@@ -278,6 +278,56 @@ void test_tc_state_rejects_size_mismatch() {
     CHECK(threw);
 }
 
+// GATE: distillation must converge to the SUPPLIED target exactly.
+//
+// The update helper forms `reward + next_value`, so distillation passes
+// (target, 0.0). A mis-wiring would make the network chase a systematically
+// wrong number while still looking like it was learning — the same shape of
+// error as the reward-index bug earlier in this project.
+void test_distillation_converges_to_target() {
+    nn::NTupleNetwork network(nn::default_tuple_specs());
+    const auto board = board_with({{0, 3}, {1, 4}, {2, 5}, {3, 6}});
+    const double target = 12345.0;
+
+    nn::TrainConfig config;
+    config.games = 0;               // distillation only, no self-play
+    config.alpha = 0.2;             // see the divergence test below
+    config.distill_passes = 40;
+    config.distill_targets = {nn::ValuedPosition{board, static_cast<float>(target)}};
+    static_cast<void>(nn::train(network, config));
+
+    CHECK_NEAR(network.value(board), target, 1.0);
+}
+
+// GATE: distillation DIVERGES at alpha = 1.0, and that must stay documented.
+//
+// A single pass overshoots by ~2.75x rather than landing on the target. The
+// cause is the LUT collision effect (E3b): on a sparse board several dihedral
+// orderings of a tuple index the SAME weight, so a step intended to move the
+// value by `delta` moves it by `delta * sum(k^2) / m` where k counts how often
+// each weight was hit. Sparse boards make that ratio large.
+//
+// This is why plain TD at alpha=1.0 collapses to 15,300, and it applies to
+// distillation identically. Pinned as a test so the hazard cannot be
+// reintroduced by someone reasoning "alpha=1.0 works with temporal coherence,
+// so it works here" — TC damps oscillation per weight, and a plain distillation
+// sweep has no such protection.
+void test_distillation_diverges_at_alpha_one() {
+    nn::NTupleNetwork network(nn::default_tuple_specs());
+    const auto board = board_with({{0, 3}, {1, 4}, {2, 5}, {3, 6}});
+
+    nn::TrainConfig config;
+    config.games = 0;
+    config.alpha = 1.0;
+    config.distill_passes = 1;
+    config.distill_targets = {nn::ValuedPosition{board, 50000.0F}};
+    static_cast<void>(nn::train(network, config));
+
+    // One pass should reach 50,000 if steps were exact; it substantially
+    // overshoots instead.
+    CHECK(network.value(board) > 50000.0 * 1.5);
+}
+
 // End-to-end: TC training must learn. A run that produces a network no better
 // than an untrained one would pass every unit test above.
 void test_tc_training_learns() {
@@ -338,6 +388,8 @@ const NamedTest kTests[] = {
     {"active_indices agrees with update", test_active_indices_agree_with_update},
     {"GATE: index sum equals value() exactly", test_index_sum_equals_value_exactly},
     {"GATE: TC state round-trips", test_tc_state_round_trips},
+    {"GATE: distillation converges to target", test_distillation_converges_to_target},
+    {"GATE: distillation diverges at alpha=1.0", test_distillation_diverges_at_alpha_one},
     {"TC state rejects size mismatch", test_tc_state_rejects_size_mismatch},
     {"TC training actually learns", test_tc_training_learns},
 };

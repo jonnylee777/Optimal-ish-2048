@@ -2,7 +2,7 @@
 
 Per the "profile before optimizing" instruction, and to avoid distorting
 timed-search measurements with new internal instrumentation (see
-`docs/experiment-taxonomy.md`), this profiles externally with macOS's
+`docs/phase1-heuristics.md`), this profiles externally with macOS's
 built-in `sample` against the existing `runtime_benchmark` binary — zero
 measurement overhead added to the engine itself.
 
@@ -35,7 +35,7 @@ listed here.)
 
 ## Reading
 
-- **No surprises, confirms the engine-review finding from `docs/experiment-taxonomy.md`
+- **No surprises, confirms the engine-review finding from `docs/phase1-heuristics.md`
   and `ROADMAP.md`**: compute is dominated by the search recursion itself
   (`chance_value`/`player_value`, ~64% combined) — expected and largely
   unavoidable for expectimax with no move ordering or pruning (see ROADMAP

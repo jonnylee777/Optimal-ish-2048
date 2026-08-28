@@ -1,7 +1,7 @@
 # Invalid results — afterstate/state leaf mismatch
 
 These N1 runs are **not valid measurements of N1's playing strength**. They
-were produced before the bug in `docs/ntuple-learning.md` ("KNOWN ISSUE") was
+were produced before the bug in `docs/phase3-td-learning.md` ("KNOWN ISSUE") was
 understood: N1 is an *afterstate* value function, but our expectimax evaluates
 leaves on *post-spawn states*, so the evaluator is asked a question it was
 never trained to answer.
@@ -14,7 +14,7 @@ them into the heuristic comparison as if they were real.
 ## Resolved — do not move these files back
 
 Both underlying defects are now fixed (see
-[`../../../docs/ULTIMATE_AGENT_PROGRESS.md`](../../../docs/ULTIMATE_AGENT_PROGRESS.md)):
+[`../../../docs/experiment-log.md`](../../../docs/experiment-log.md)):
 
 - **E1** — the leaf mismatch, fixed by `EvaluationSemantics` on the
   `Evaluator` interface. The capability is a query, not the
