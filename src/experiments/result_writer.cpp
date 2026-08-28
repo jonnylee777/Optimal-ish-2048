@@ -255,6 +255,8 @@ ResultFiles write_experiment_results(
          << "    \"first_seed\": " << experiment.config.first_seed << ",\n"
          << "    \"last_seed\": " << last_seed << ",\n"
          << "    \"game_count\": " << experiment.games.size() << ",\n"
+         << "    \"worker_threads\": " << experiment.worker_count << ",\n"
+         << "    \"timing_valid\": " << (experiment.worker_count == 1 ? "true" : "false") << ",\n"
          << "    \"optimization_configuration\": \""
          << json_escape(metadata.optimization_configuration) << "\"\n"
          << "  },\n"

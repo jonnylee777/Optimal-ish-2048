@@ -94,7 +94,26 @@ cmake --build build-release --target run_experiment
 
 # Manual weight override (Phase 1 has no config-file/optimizer integration yet).
 ./build-release/run_experiment --heuristic H0 --weight empty_cells=120 --search fixed --depth 4 --seeds quick
+
+# Buy sample size with cores. Scores are BIT-IDENTICAL at any --threads value
+# (pinned by a GATE test); only per-move timing is contended, and the result
+# file records `worker_threads` and `timing_valid` so a parallel run can never
+# be quoted as a speed measurement. Measured 3.4x on this 8-core M1.
+./build-release/run_experiment --heuristic N1 --weights experiments/weights/n5_large_1M.bin \
+  --search fixed --depth 4 --probability-cutoff 0.0015 --seeds 30000-30199 --threads 8
 ```
+
+**Use enough games.** At depth 4 the per-game score spread is ~85,000 on a
+~356,000 mean, so n=60 cannot resolve anything below ~9% and n=200 gets to
+~5%. Matched seeds do NOT help — two agents decorrelate within a few moves, and
+the measured per-seed correlation between runs is ~0. Sample size is the only
+lever, which is what `--threads` is for. `tools/compare_runs.py` now reports the
+effect a run was powered to detect and refuses to call an underpowered result a
+tie.
+
+A depth-1 game costs about 9 ms, so **depth-1 comparisons should use n=10,000**
+(~90 seconds) rather than the n=200-300 used historically; that alone takes the
+detectable effect from ~9% to ~1%.
 
 Every run writes CSV/JSON into `--output-dir` (defaults to
 `experiments/results/phase1-heuristics/` or `experiments/results/phase1-heuristics/` based on

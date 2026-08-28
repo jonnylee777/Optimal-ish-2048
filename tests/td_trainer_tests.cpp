@@ -410,6 +410,54 @@ void test_lambda_half_learns() {
     CHECK(greedy_mean(network) > baseline * 1.5);
 }
 
+
+// GATE: parallel training must play the SAME games and learn something
+// comparable to the serial run.
+//
+// It cannot be bit-identical -- Hogwild deliberately lets update order vary --
+// so this pins the two properties that must hold anyway: every requested game
+// is played exactly once (no game lost or duplicated by the work queue), and
+// the resulting network is in the same place, not merely finite. A parallel run
+// that silently dropped half its games would still "learn", so game accounting
+// is the assertion that catches it.
+void test_parallel_training_plays_every_game_and_learns() {
+    nn::TrainConfig serial_config;
+    serial_config.games = 400;
+    serial_config.alpha = 1.0;
+    serial_config.seed = 20250828;
+    serial_config.temporal_coherence = true;
+    serial_config.backward_updates = true;
+    serial_config.evaluate_every = 0;
+
+    auto parallel_config = serial_config;
+    parallel_config.worker_threads = 4;
+
+    nn::NTupleNetwork serial_network(nn::default_tuple_specs());
+    const auto serial = nn::train(serial_network, serial_config);
+
+    nn::NTupleNetwork parallel_network(nn::default_tuple_specs());
+    const auto parallel = nn::train(parallel_network, parallel_config);
+
+    CHECK(serial.games_played == serial_config.games);
+    CHECK(parallel.games_played == parallel_config.games);
+
+    // Both must have actually learned: an untrained network scores a few
+    // thousand, so anything near that means the updates did not land.
+    CHECK(serial.mean_score > 1000.0);
+    CHECK(parallel.mean_score > 1000.0);
+
+    // And land in the same neighbourhood. The bound is loose on purpose --
+    // update order genuinely differs, and 400 games is a noisy sample -- but a
+    // parallel run whose updates were being lost or corrupted would miss it by
+    // far more than a factor of two.
+    CHECK(parallel.mean_score > serial.mean_score / 2.0);
+    CHECK(parallel.mean_score < serial.mean_score * 2.0);
+
+    // The concurrent access flag is training-only state: leaving it set would
+    // keep the atomic path live for every later search that uses these weights.
+    CHECK(!parallel_network.concurrent());
+}
+
 }  // namespace
 
 int main() {
@@ -430,6 +478,8 @@ int main() {
         {"backward replay is a distinct code path", test_backward_replay_is_a_distinct_path},
         {"GATE: lambda=0 matches plain TD(0)", test_lambda_zero_matches_plain_backward},
         {"GATE: lambda=1 needs no bootstrap", test_lambda_one_ignores_initial_weights},
+        {"GATE: parallel training plays every game and learns",
+         test_parallel_training_plays_every_game_and_learns},
         {"TD(lambda=0.5) learns", test_lambda_half_learns},
     };
 

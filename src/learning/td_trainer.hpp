@@ -136,6 +136,28 @@ struct TrainConfig {
     double seed_position_fraction{0.0};
     std::vector<Board> seed_positions;
 
+    // Play this many self-play games concurrently, all updating one shared
+    // weight table without locking (Hogwild). 1 keeps the original behaviour.
+    //
+    // Why this is the lever it is. E29 re-measured every depth-1 conclusion at
+    // n=10,000 and found that of everything tried here -- global features,
+    // structural features, distillation, endgame seeding, bigger tuple sets,
+    // multi-stage splits, relative indexing -- **only more training helps**
+    // (1M -> 2M games = +5.2%, four and a half standard errors out). So the
+    // binding constraint is games per hour, and this loop was single-threaded on
+    // a machine with 8 cores.
+    //
+    // Collisions are rare and benign: 40 of 83.9M weights move per update, and
+    // a lost update is smaller than the noise TD already carries. Accesses go
+    // through relaxed atomics so this is defined behaviour, not a tolerated
+    // race (see relaxed_atomic.hpp).
+    //
+    // NOT BIT-REPRODUCIBLE above 1. Each game's environment is still fixed by
+    // `seed + game_index`, so the same games are played, but the order in which
+    // their updates land varies run to run. A run whose exact weights must be
+    // reproducible has to use 1 thread; the trainer says so when it does not.
+    std::size_t worker_threads{1};
+
     // Where to read/write temporal-coherence accumulators, so training can be
     // extended across runs. Empty means do not persist (TC starts fresh).
     std::filesystem::path temporal_coherence_state;

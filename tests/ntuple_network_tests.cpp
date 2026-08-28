@@ -891,6 +891,133 @@ void test_structural_features_cost_one_weight_and_round_trip() {
     std::filesystem::remove(path);
 }
 
+// GATE: the relative bank must transfer across scales WITHOUT the network
+// losing absolute scale -- that combination is the whole point, and it is
+// exactly what E27's replacement form could not do.
+void test_relative_bank_transfers_but_keeps_scale() {
+    a2048::CellArray low{};
+    low[0] = 11; low[1] = 10; low[2] = 9; low[3] = 8; low[5] = 3;
+    a2048::CellArray high{};
+    high[0] = 14; high[1] = 13; high[2] = 12; high[3] = 11; high[5] = 6;
+
+    nn::NTupleNetwork banked(nn::default_tuple_specs(), 1, false,
+                             nn::IndexingMode::absolute, 10, false, true);
+    nn::NTupleNetwork plain(nn::default_tuple_specs());
+    CHECK(banked.has_relative_bank());
+
+    // Both trained on the LOW board only, then asked about the HIGH board.
+    banked.update(a2048::encode(low), 3.0);
+    plain.update(a2048::encode(low), 3.0);
+
+    // Difference the two networks rather than comparing the banked one against
+    // its own starting value. An absolute network already transfers a little by
+    // accident -- some dihedral orderings land entirely on cells that are empty
+    // in BOTH boards and so share an all-zero entry, which the same trap in the
+    // relative-indexing test above documents. Differencing cancels that, so
+    // what is left is the bank's contribution and nothing else.
+    const auto bank_contribution =
+        banked.value(a2048::encode(high)) - plain.value(a2048::encode(high));
+    CHECK(bank_contribution != 0.0);
+
+    // And the bank must NOT make the two scales equal: the absolute tables
+    // still separate them, so the network can still tell a 16384 board from a
+    // 2048 board. That is the property E27 destroyed by replacing rather than
+    // adding, and it is why this one is expected to behave differently.
+    CHECK(banked.value(a2048::encode(low)) != banked.value(a2048::encode(high)));
+}
+
+// The bank must cost exactly one extra weight per ordering, sit entirely after
+// the absolute region, and leave that region byte-identical -- which is what
+// lets a trained network be resumed into a banked one.
+void test_relative_bank_layout_and_adoption() {
+    const nn::NTupleNetwork plain(nn::default_tuple_specs());
+    nn::NTupleNetwork banked(nn::default_tuple_specs(), 1, false,
+                             nn::IndexingMode::absolute, 10, false, true);
+
+    CHECK(banked.active_weight_count() == 2 * plain.active_weight_count());
+    CHECK(banked.tuple_weight_count() == plain.tuple_weight_count());
+    CHECK(banked.total_weight_count() > plain.total_weight_count());
+
+    // 9^n per tuple, on top of the absolute 16^n.
+    std::size_t expected = plain.total_weight_count();
+    for (const auto& spec : nn::default_tuple_specs()) {
+        expected += nn::relative_bank_lut_size(spec.cells.size());
+    }
+    CHECK(banked.total_weight_count() == expected);
+
+    // Adopting a trained absolute network must copy the absolute region and
+    // leave the bank at zero, so "does the bank help" is not confounded with
+    // "was this run long enough".
+    nn::NTupleNetwork trained(nn::default_tuple_specs());
+    a2048::CellArray cells{};
+    cells[0] = 11; cells[1] = 10; cells[2] = 9;
+    trained.update(a2048::encode(cells), 5.0);
+    banked.adopt_tuple_weights(trained);
+    CHECK(std::abs(banked.value(a2048::encode(cells)) -
+                   trained.value(a2048::encode(cells))) < 1e-9);
+}
+
+// Empty cells must keep their own code. If an empty cell could collide with an
+// occupied one the bank would be indexing a different board than it thinks.
+void test_relative_bank_distinguishes_empty_from_occupied() {
+    nn::NTupleNetwork banked(nn::default_tuple_specs(), 1, false,
+                             nn::IndexingMode::absolute, 10, false, true);
+    // Same maximum, differing only in whether cell 2 holds the smallest tile.
+    a2048::CellArray with_tile{};
+    with_tile[0] = 11; with_tile[1] = 10; with_tile[2] = 1;
+    a2048::CellArray without{};
+    without[0] = 11; without[1] = 10;
+    banked.update(a2048::encode(with_tile), 7.0);
+    CHECK(banked.value(a2048::encode(with_tile)) != banked.value(a2048::encode(without)));
+
+    // A cell eight or more doublings below the maximum saturates, so two boards
+    // differing only below that depth share an entry. Deliberate: verify the
+    // clamp is actually clamping rather than silently widening the table.
+    a2048::CellArray deep_a{};
+    deep_a[0] = 15; deep_a[1] = 14; deep_a[2] = 1;
+    a2048::CellArray deep_b{};
+    deep_b[0] = 15; deep_b[1] = 14; deep_b[2] = 2;
+    nn::NTupleNetwork clamp_probe(nn::default_tuple_specs(), 1, false,
+                                  nn::IndexingMode::absolute, 10, false, true);
+    // Compare bank contribution alone by differencing against a bank-free twin.
+    nn::NTupleNetwork absolute_twin(nn::default_tuple_specs());
+    clamp_probe.update(a2048::encode(deep_a), 1.0);
+    absolute_twin.update(a2048::encode(deep_a), 1.0);
+    const auto bank_a = clamp_probe.value(a2048::encode(deep_a)) -
+                        absolute_twin.value(a2048::encode(deep_a));
+    const auto bank_b = clamp_probe.value(a2048::encode(deep_b)) -
+                        absolute_twin.value(a2048::encode(deep_b));
+    CHECK(std::abs(bank_a - bank_b) < 1e-9);
+}
+
+void test_relative_bank_round_trips_and_rejects_mismatch() {
+    nn::NTupleNetwork banked(nn::default_tuple_specs(), 1, false,
+                             nn::IndexingMode::absolute, 10, false, true);
+    a2048::CellArray cells{};
+    cells[0] = 13; cells[1] = 12; cells[4] = 9;
+    banked.update(a2048::encode(cells), 2.5);
+    const auto expected = banked.value(a2048::encode(cells));
+
+    const auto path = std::filesystem::temp_directory_path() / "a2048_relbank_test.bin";
+    banked.save(path);
+
+    const auto reloaded = nn::NTupleNetwork::load_from(path);
+    CHECK(reloaded.has_relative_bank());
+    CHECK(std::abs(reloaded.value(a2048::encode(cells)) - expected) < 1e-9);
+
+    // A bank-free network must refuse the file rather than read the absolute
+    // region and silently ignore 10 MB of weights.
+    nn::NTupleNetwork plain(nn::default_tuple_specs());
+    bool rejected = false;
+    try {
+        plain.load(path);
+    } catch (const std::exception&) {
+        rejected = true;
+    }
+    CHECK(rejected);
+    std::filesystem::remove(path);
+}
+
 }  // namespace
 
 int main() {
@@ -936,6 +1063,14 @@ int main() {
          test_global_feature_participates_in_updates},
         {"global features round-trip, mismatch rejected",
          test_global_features_round_trip_and_mismatch},
+        {"GATE: relative bank transfers across scales, keeps scale",
+         test_relative_bank_transfers_but_keeps_scale},
+        {"relative bank layout and adoption",
+         test_relative_bank_layout_and_adoption},
+        {"relative bank distinguishes empty from occupied",
+         test_relative_bank_distinguishes_empty_from_occupied},
+        {"relative bank round-trips, mismatch rejected",
+         test_relative_bank_round_trips_and_rejects_mismatch},
     };
 
     std::size_t failures = 0;

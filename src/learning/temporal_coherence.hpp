@@ -55,6 +55,19 @@ public:
     // doing anything" observable instead of a matter of faith.
     double update(NTupleNetwork& network, Board afterstate, double target, double alpha);
 
+    // Same update, but with caller-supplied scratch so several threads can call
+    // it concurrently. The member scratch buffer is the only thing that makes
+    // the overload above single-threaded.
+    double update(NTupleNetwork& network, Board afterstate, double target, double alpha,
+                  std::vector<std::size_t>& scratch);
+
+    // Use relaxed atomic accesses for the E and A accumulators, for the same
+    // reason NTupleNetwork::set_concurrent exists: under Hogwild several threads
+    // touch the same entries, and a plain concurrent read/write is a data race.
+    // Lost accumulator updates only perturb a step size, which TC is designed to
+    // be robust to.
+    void set_concurrent(bool concurrent) noexcept { concurrent_ = concurrent; }
+
     // Mean beta over every weight visited at least once. Cheap enough to log
     // once per evaluation interval, not per move.
     [[nodiscard]] double mean_beta() const;
@@ -81,6 +94,11 @@ private:
     std::vector<float> error_sum_;           // E per weight
     std::vector<float> absolute_error_sum_;  // A per weight
     std::vector<std::size_t> scratch_;       // reused index buffer, avoids per-move allocation
+    bool concurrent_{false};
+
+    template <bool Concurrent>
+    double update_impl(NTupleNetwork& network, Board afterstate, double target, double alpha,
+                       std::vector<std::size_t>& scratch);
 };
 
 // Optimistic initialisation: set every weight so that an untouched board

@@ -6,19 +6,25 @@ Every agent built for this project, how it was made, and what it scored.
 
 | | |
 |---|---|
-| **Score** | **356,178** average |
-| Weights | `experiments/weights/n5_large_1M.bin` (320 MB) |
+| **Score** | **345,380** average (n=200) |
+| Weights | `experiments/weights/n12_plain_2M.bin` (320 MB) |
 | How it plays | looks 4 moves ahead |
-| How it was made | 1,000,000 self-play games |
-| Reaches 16,384 | 97% of games |
-| Reaches 32,768 | 3% of games |
+| How it was made | 2,000,000 self-play games |
+| Reaches 16,384 | 93% of games |
+| Reaches 32,768 | 4.5% of games |
 | Best single game | 580,784 |
+
+**The old headline of 356,178 was an n=60 measurement and is 3.3% optimistic.**
+Re-run on 200 games, the same `n5_large_1M` weights score **344,399**.
+`n12_plain_2M` is now listed as best on the strength of a properly powered
+depth-1 result (+5.2%, n=10,000); at depth 4 the two are indistinguishable
+(+0.3%, p=0.89) and n=200 cannot resolve a difference smaller than 5.5%.
 
 Run it with:
 
 ```sh
-run_experiment --heuristic N1 --weights experiments/weights/n5_large_1M.bin \
-  --search fixed --depth 4 --probability-cutoff 0.0015 --seeds 30000-30059
+run_experiment --heuristic N1 --weights experiments/weights/n12_plain_2M.bin \
+  --search fixed --depth 4 --probability-cutoff 0.0015 --seeds 30000-30199 --threads 8
 ```
 
 ---
@@ -33,8 +39,14 @@ from samples of 3–30 games.** Treat anything below n=200 as a pilot, and use
 
 **"Looks N moves ahead" is chosen when you play, not when you train.** The same
 saved network can play at any depth, and it matters a lot — the best network
-scores 226,324 looking one move ahead and 356,178 looking four ahead. Never
+scores 240,366 looking one move ahead and 345,380 looking four ahead. Never
 compare two networks at different depths.
+
+**Use enough games.** At depth 4 this benchmark resolves ~5% at n=200 and only
+~9% at n=60. Matched seeds do *not* help: measured per-seed correlation between
+two runs is ~0 for score. `--threads` is how you buy sample size — scores are
+bit-identical at any worker count. A depth-1 game costs ~9 ms, so depth-1
+comparisons should use n=10,000, not the n=200-300 used historically.
 
 **Score is mostly decided by the biggest tile you reach:**
 
@@ -54,7 +66,7 @@ This is why the tile percentages matter as much as the score.
 |---|---|---:|---|
 | **1** | Hand-written rules | 109,213 | superseded, but better than expected |
 | **2** | Perfect endgame lookup tables | — | abandoned twice |
-| **3** | Learning from self-play | **356,178** | **the winner** |
+| **3** | Learning from self-play | **345,380** | **the winner** |
 | **4** | Structural changes to break the ceiling | no gain yet | 8 attempts, all ties or worse |
 
 These are genuinely different ways of choosing a move, not refinements of each
@@ -104,8 +116,11 @@ bit-identical answers. Smaller board sizes (2×4, 3×3, 3×4) were solved perfec
    could not reach at the time.
 2. **Relevance.** Once the agent *could* reach them, this was re-examined — and
    measurement killed it again. Only **1% of late-game moves** land in a position
-   those tables cover. More importantly, watching 40 games die showed the agent
-   does not lose on endgame tactics at all (see approach 4).
+   those tables cover. A second reason was given at the time — "the agent does
+   not lose on endgame tactics" — and **that one has since been refuted**: 83.6%
+   of games reach 16,384 + 8,192 and fail to convert, which is precisely an
+   endgame-precision failure (see approach 4). The 1% coverage argument stands
+   on its own; the tactics argument does not.
 
 The lasting benefit was **H5**, the evaluation formula that came with it.
 
@@ -138,10 +153,14 @@ unless noted, so the progression is comparable.
 | `n5_large_1M` | **10× more training** (1M games) | 226,324 | 54% |
 | `n5_large_1M` @ 2 ahead | *same network, deeper search* | 306,416 | 86% |
 | `n5_large_1M` @ 3 ahead | *same network, deeper search* | 334,030 | 94% |
-| **`n5_large_1M` @ 4 ahead** | *same network, deeper search* | **356,178** | **97%** |
+| **`n5_large_1M` @ 4 ahead** | *same network, deeper search* | **356,178 (n=60)** | **97%** |
+| `n5_large_1M` @ 4 ahead | *re-run at n=200* | **344,399** | 95% |
+| `n12_plain_2M` @ 1 ahead | 2M games, n=10,000 | 240,366 | 59% |
+| **`n12_plain_2M` @ 4 ahead** | *same network, deeper search*, n=200 | **345,380** | 93% |
 
-Note the last four rows are **one network**. Nothing was retrained — searching
-deeper took it from 226,324 to 356,178.
+Note the middle rows are **one network**. Nothing was retrained — searching
+deeper took it from 226,324 to 344,399. Every figure above n=200 in this table
+is a pilot; the two n=60 entries are 3.3% optimistic.
 
 ### What actually moved the number
 
@@ -152,7 +171,7 @@ deeper took it from 226,324 to 356,178.
 | Replaying each game backwards while learning | +17.9% |
 | **Bigger pattern table** (128 → 320 MB) | **+20.8%** |
 | **Fixing how dead positions were valued** *(bug)* | **+48%** |
-| More training beyond 1M games | no gain |
+| More training beyond 1M games | **+5.2% per doubling** (was recorded as "no gain" from an n=60 run) |
 
 ### The single biggest fix
 
@@ -189,21 +208,36 @@ had to be thrown out. The 22 runs that *were* invalidated are kept separately in
 
 ### Why the agent is stuck
 
-The agent reaches 16,384 in 97% of games — it has essentially mastered that
-level. To score much higher it needs **32,768**, which it manages in 3%.
+The agent reaches 16,384 in ~95% of games — it has essentially mastered that
+level. To score much higher it needs **32,768**, which it manages in 4.5%.
 
-Watching 40 games die showed the cause is remarkably uniform:
+**This section previously said the agent "cannot rebuild underneath" a 16,384,
+calling it a ~100-move task beyond any search horizon. That was wrong**, and it
+set the roadmap for months: it is why deeper search was deprioritised and why
+the endgame tablebase was dropped a second time.
 
-| How the game ended | Games |
-|---|---:|
-| **Never built a second 16,384** | **38 / 40** |
-| Big tiles fell out of order | 2 / 40 |
-| Boxed in with no moves left | 0 |
-| One merge short | 0 |
+A 160-game autopsy (`scratchpad/autopsy.cpp`) recorded, for every game that
+reached 16,384, the **largest second tile it ever held beside it**:
 
-Only 2 of 40 games ever held two 16,384 tiles at once. **The agent is not losing
-on endgame tactics.** It reaches 16,384 and then cannot rebuild underneath it —
-a roughly 100-move task, far too long for any search to plan.
+| Largest second tile | Games | Share |
+|---|---:|---:|
+| 4,096 | 21 | 13.8% |
+| **8,192** | **127** | **83.6%** |
+| 16,384 (done it) | 4 | 2.6% |
+
+**83.6% of games reach 16,384 + 8,192 — one merge short of a second 16,384.**
+The agent finishes the rebuild. It then fails to convert, 97% of the time.
+
+The same fact as a like-for-like comparison:
+
+| Task | Free cells | Succeeds |
+|---|---:|---:|
+| Build an 8,192 with one cell locked | 15 | 95.5% |
+| Build an 8,192 with two cells locked | 14 | ~3% |
+
+Identical ladder to build, one fewer cell to do it in, ~32x worse. That is
+**precision on a nearly-full board**, which is what search depth buys — not a
+planning horizon problem.
 
 ### Attempts so far
 
@@ -224,12 +258,28 @@ every board look identical regardless of scale, so the network lost track of
 whether it was early or late in the game. It reached the rare situation by
 destroying its knowledge of where it was.
 
-### The pattern behind these ties
+### The pattern behind these ties — and why it is not what it looked like
 
-Six attempts land at ~350,000. The reason is consistent: **when the agent looks
-4 moves ahead, the search already covers for the network's mistakes.** So making
-the network generally smarter shows up at one-move-ahead play and disappears at
-four. This was confirmed independently three times.
+Six attempts landed at ~350,000, and this was read as "search already covers for
+the network's mistakes." **That reading is not supported.** Every one of those
+runs was n=60, where this benchmark cannot resolve anything below ~9%, and the
+effects being tested were 2-7%. They were not measured equal; they were not
+measured.
+
+Re-measured at depth 1 with n=10,000 (~1.1% resolution), against each change's
+own matched control:
+
+| Change | vs matched control |
+|---|---:|
+| More training (1M -> 2M) | **+5.2%** (real) |
+| Structural features | +0.5% (tie) |
+| Distillation | -1.7% |
+| Endgame seeding | -1.8% |
+| Global features | **-9.2%** |
+| `xlarge` 512 MB | **-34.0%** |
+
+**Only more training has ever worked.** Every feature idea is a tie or a loss
+once compared against a control that got the same extra games.
 
 Related: **two improvements that fix the same weakness are substitutes, not
 additive.** Measured three times — optimistic starting values plus the new

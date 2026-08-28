@@ -1,5 +1,7 @@
 #include "learning/ntuple_network.hpp"
 
+#include "learning/relaxed_atomic.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -27,6 +29,8 @@ constexpr std::uint32_t kFlagRelativeIndexing = 1U << 1U;
 // maps to the historical default of 10, so v3 files written before this change
 // still load with their original meaning.
 constexpr std::uint32_t kFlagStructuralFeatures = 1U << 2U;
+constexpr std::uint32_t kFlagRelativeBank = 1U << 3U;
+// Bits 8-15 carry the stage split point, so flag bits stop at 7.
 constexpr std::uint32_t kStageBaseShift = 8U;
 
 // The 8 dihedral symmetries of the square, as (row, column) maps. A tuple's
@@ -75,6 +79,33 @@ constexpr std::array<CellMapper, 8> kSymmetries{
         size *= 16U;
     }
     return size;
+}
+
+// Rank-relative cell codes for the relative bank, packed 4 bits per cell.
+//
+//   empty       -> 0
+//   occupied    -> 1 + min(7, board_max_exponent - exponent)
+//
+// Nine states, which is why the bank indexes base 9 rather than base 16. The
+// drop is clamped at 7 because cells more than seven doublings below the
+// maximum carry no information about the large-tile structure this bank exists
+// to generalise over, and separate codes for them would only fragment the
+// table.
+[[nodiscard]] std::uint64_t relative_bank_codes(std::uint64_t clamped) noexcept {
+    std::uint64_t maximum = 0;
+    for (std::size_t cell = 0; cell < kCellCount; ++cell) {
+        maximum = std::max(maximum, (clamped >> (4U * cell)) & 0xFULL);
+    }
+    std::uint64_t codes = 0;
+    for (std::size_t cell = 0; cell < kCellCount; ++cell) {
+        const auto exponent = (clamped >> (4U * cell)) & 0xFULL;
+        if (exponent == 0) {
+            continue;  // code 0, already there
+        }
+        const auto drop = std::min<std::uint64_t>(7U, maximum - exponent);
+        codes |= (drop + 1U) << (4U * cell);
+    }
+    return codes;
 }
 
 void write_exact(std::ofstream& stream, const void* data, std::size_t bytes) {
@@ -164,6 +195,14 @@ std::vector<std::string> tuple_configuration_names() {
     return {"default", "large", "xlarge"};
 }
 
+std::size_t relative_bank_lut_size(std::size_t cell_count) noexcept {
+    std::size_t size = 1;
+    for (std::size_t index = 0; index < cell_count; ++index) {
+        size *= 9U;
+    }
+    return size;
+}
+
 std::size_t stage_of(Board board, std::size_t stage_count,
                      std::uint8_t base_exponent) noexcept {
     if (stage_count <= 1) {
@@ -248,10 +287,11 @@ std::size_t structural_feature_index(Board board) noexcept {
 
 NTupleNetwork::NTupleNetwork(std::vector<TupleSpec> specs, std::size_t stage_count,
                              bool global_features, IndexingMode indexing,
-                             std::uint8_t stage_base_exponent, bool structural_features)
+                             std::uint8_t stage_base_exponent, bool structural_features,
+                             bool relative_bank)
     : specs_(std::move(specs)), stage_count_(stage_count), global_features_(global_features),
       indexing_(indexing), stage_base_exponent_(stage_base_exponent),
-      structural_features_(structural_features) {
+      structural_features_(structural_features), relative_bank_(relative_bank) {
     if (specs_.empty()) {
         throw std::invalid_argument("n-tuple network needs at least one tuple");
     }
@@ -326,6 +366,18 @@ NTupleNetwork::NTupleNetwork(std::vector<TupleSpec> specs, std::size_t stage_cou
         offset += kStructuralFeatureSize;
         ++active_weight_count_;
     }
+    // The relative bank goes LAST so that global_offset_ -- and therefore
+    // tuple_weight_count() and adopt_tuple_weights() -- keep meaning "the
+    // absolute tuple region". That is what lets a trained absolute network be
+    // resumed into a bank-enabled one with the bank starting at zero.
+    if (relative_bank_) {
+        for (std::size_t index = 0; index < tuples_.size(); ++index) {
+            tuples_[index].relative_offset = offset;
+            tuples_[index].relative_size = relative_bank_lut_size(specs_[index].cells.size());
+            offset += tuples_[index].relative_size;
+            active_weight_count_ += tuples_[index].ordering_shifts.size();
+        }
+    }
     stage_stride_ = offset;
     weights_.assign(offset * stage_count_, 0.0F);
 }
@@ -386,41 +438,102 @@ std::size_t NTupleNetwork::index_of(
     return index;
 }
 
-double NTupleNetwork::value(Board board) const noexcept {
+std::size_t NTupleNetwork::relative_index_of(
+    std::uint64_t codes, const std::vector<std::uint8_t>& shifts) const noexcept {
+    // Same ordering rule as index_of, base 9 instead of 16 because a cell has
+    // nine rank-relative codes. Not a shift, so this costs a multiply per cell.
+    std::size_t index = 0;
+    for (const auto shift : shifts) {
+        index = index * 9U + static_cast<std::size_t>((codes >> shift) & 0xFULL);
+    }
+    return index;
+}
+
+template <bool Concurrent>
+double NTupleNetwork::value_impl(Board board) const noexcept {
+    const auto read = [](const float& slot) noexcept {
+        if constexpr (Concurrent) {
+            return load_relaxed(slot);
+        } else {
+            return slot;
+        }
+    };
     const auto packed = indexed_packed(board);
     const auto base = stage_offset(board);
     double total = 0.0;
     for (const auto& tuple : tuples_) {
         for (const auto& shifts : tuple.ordering_shifts) {
             total += static_cast<double>(
-                weights_[base + tuple.lut_offset + index_of(packed, shifts)]);
+                read(weights_[base + tuple.lut_offset + index_of(packed, shifts)]));
         }
     }
     if (global_features_) {
         total += static_cast<double>(
-            weights_[base + global_offset_ + global_feature_index(board)]);
+            read(weights_[base + global_offset_ + global_feature_index(board)]));
     }
     if (structural_features_) {
         total += static_cast<double>(
-            weights_[base + structural_offset_ + structural_feature_index(board)]);
+            read(weights_[base + structural_offset_ + structural_feature_index(board)]));
+    }
+    if (relative_bank_) {
+        // Always from the CLAMPED board, never from indexed_packed(): the bank
+        // computes its own normalisation, and reading an already-relative board
+        // would normalise twice and collapse every code to the same value.
+        const auto codes = relative_bank_codes(clamped_packed(board));
+        for (const auto& tuple : tuples_) {
+            for (const auto& shifts : tuple.ordering_shifts) {
+                total += static_cast<double>(
+                    read(weights_[base + tuple.relative_offset +
+                                  relative_index_of(codes, shifts)]));
+            }
+        }
     }
     return total;
 }
 
-void NTupleNetwork::update(Board board, double per_weight_delta) noexcept {
+template <bool Concurrent>
+void NTupleNetwork::update_impl(Board board, double per_weight_delta) noexcept {
+    const auto add = [](float& slot, float amount) noexcept {
+        if constexpr (Concurrent) {
+            add_relaxed(slot, amount);
+        } else {
+            slot += amount;
+        }
+    };
     const auto packed = indexed_packed(board);
     const auto base = stage_offset(board);
     const auto delta = static_cast<float>(per_weight_delta);
     for (const auto& tuple : tuples_) {
         for (const auto& shifts : tuple.ordering_shifts) {
-            weights_[base + tuple.lut_offset + index_of(packed, shifts)] += delta;
+            add(weights_[base + tuple.lut_offset + index_of(packed, shifts)], delta);
         }
     }
     if (global_features_) {
-        weights_[base + global_offset_ + global_feature_index(board)] += delta;
+        add(weights_[base + global_offset_ + global_feature_index(board)], delta);
     }
     if (structural_features_) {
-        weights_[base + structural_offset_ + structural_feature_index(board)] += delta;
+        add(weights_[base + structural_offset_ + structural_feature_index(board)], delta);
+    }
+    if (relative_bank_) {
+        const auto codes = relative_bank_codes(clamped_packed(board));
+        for (const auto& tuple : tuples_) {
+            for (const auto& shifts : tuple.ordering_shifts) {
+                add(weights_[base + tuple.relative_offset + relative_index_of(codes, shifts)],
+                    delta);
+            }
+        }
+    }
+}
+
+double NTupleNetwork::value(Board board) const noexcept {
+    return concurrent_ ? value_impl<true>(board) : value_impl<false>(board);
+}
+
+void NTupleNetwork::update(Board board, double per_weight_delta) noexcept {
+    if (concurrent_) {
+        update_impl<true>(board, per_weight_delta);
+    } else {
+        update_impl<false>(board, per_weight_delta);
     }
 }
 
@@ -439,6 +552,14 @@ void NTupleNetwork::active_indices(Board board, std::vector<std::size_t>& out) c
     }
     if (structural_features_) {
         out.push_back(base + structural_offset_ + structural_feature_index(board));
+    }
+    if (relative_bank_) {
+        const auto codes = relative_bank_codes(clamped_packed(board));
+        for (const auto& tuple : tuples_) {
+            for (const auto& shifts : tuple.ordering_shifts) {
+                out.push_back(base + tuple.relative_offset + relative_index_of(codes, shifts));
+            }
+        }
     }
 }
 
@@ -464,6 +585,7 @@ void NTupleNetwork::save(const std::filesystem::path& path) const {
         // Write the OLDEST version that can express this network, so files stay
         // readable by anything that predates a feature it does not use.
         const auto needs_flags = global_features_ || structural_features_ ||
+                                 relative_bank_ ||
                                  indexing_ == IndexingMode::relative ||
                                  (stage_count_ > 1 && stage_base_exponent_ != 10);
         const auto version = needs_flags ? kFlaggedFormatVersion
@@ -479,6 +601,7 @@ void NTupleNetwork::save(const std::filesystem::path& path) const {
                 (global_features_ ? kFlagGlobalFeatures : 0U) |
                 (indexing_ == IndexingMode::relative ? kFlagRelativeIndexing : 0U) |
                 (structural_features_ ? kFlagStructuralFeatures : 0U) |
+                (relative_bank_ ? kFlagRelativeBank : 0U) |
                 (static_cast<std::uint32_t>(stage_base_exponent_) << kStageBaseShift);
             write_exact(stream, &flags, sizeof(flags));
         }
@@ -515,6 +638,7 @@ struct HeaderInfo {
     IndexingMode indexing{IndexingMode::absolute};
     std::uint8_t stage_base{10};
     bool structural_features{false};
+    bool relative_bank{false};
 };
 
 [[nodiscard]] HeaderInfo read_header_specs(
@@ -548,6 +672,7 @@ struct HeaderInfo {
         info.indexing = (flags & kFlagRelativeIndexing) != 0U ? IndexingMode::relative
                                                              : IndexingMode::absolute;
         info.structural_features = (flags & kFlagStructuralFeatures) != 0U;
+        info.relative_bank = (flags & kFlagRelativeBank) != 0U;
         const auto recorded = static_cast<std::uint8_t>((flags >> kStageBaseShift) & 0xFFU);
         info.stage_base = recorded == 0 ? 10 : recorded;
     }
@@ -578,7 +703,7 @@ NTupleNetwork NTupleNetwork::load_from(const std::filesystem::path& path) {
     auto header = read_header_specs(stream, path);
     NTupleNetwork network(std::move(header.specs), header.stage_count,
                           header.global_features, header.indexing, header.stage_base,
-                          header.structural_features);
+                          header.structural_features, header.relative_bank);
 
     std::uint64_t weight_count = 0;
     read_exact(stream, &weight_count, sizeof(weight_count), path);
@@ -623,12 +748,14 @@ void NTupleNetwork::load(const std::filesystem::path& path) {
         file_stages = stages;
     }
     bool file_global = false;
+    bool file_relative_bank = false;
     bool file_global_flags_read = false;
     auto file_indexing_read = IndexingMode::absolute;
     if (version >= kFlaggedFormatVersion) {
         std::uint32_t flags = 0;
         read_exact(stream, &flags, sizeof(flags), path);
         file_global = (flags & kFlagGlobalFeatures) != 0U;
+        file_relative_bank = (flags & kFlagRelativeBank) != 0U;
         file_indexing_read = (flags & kFlagRelativeIndexing) != 0U ? IndexingMode::relative
                                                                   : IndexingMode::absolute;
         file_global_flags_read = true;
@@ -641,6 +768,10 @@ void NTupleNetwork::load(const std::filesystem::path& path) {
     }
     if (file_global != global_features_) {
         throw std::runtime_error("weight file global-feature setting does not match: " +
+                                 path.string());
+    }
+    if (file_relative_bank != relative_bank_) {
+        throw std::runtime_error("weight file relative-bank setting does not match: " +
                                  path.string());
     }
     if (file_stages != stage_count_) {
@@ -712,6 +843,9 @@ std::string NTupleNetwork::fingerprint() const {
     }
     if (structural_features_) {
         out << ",structural";
+    }
+    if (relative_bank_) {
+        out << ",relbank";
     }
     if (indexing_ == IndexingMode::relative) {
         out << ",relative";

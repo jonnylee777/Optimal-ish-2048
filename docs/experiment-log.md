@@ -1642,6 +1642,258 @@ says that instead.
 
 ---
 
+## E32 — The probability cutoff, not the depth setting, is the real depth knob
+
+Derived while sizing E33, and it changes what "depth 8" means here.
+
+The cutoff prunes a chance branch when its cumulative path probability falls
+below `--probability-cutoff`. A 2-spawn on an `e`-empty board carries
+probability `0.9/e`, so a path of `k` chance layers survives only while
+`(0.9/e)^k >= 0.0015`:
+
+| Empty cells | Player layers the cutoff permits |
+|---:|---:|
+| 2 | ~8.1 |
+| 3 | ~5.4 |
+| 4 | ~4.4 |
+| 5 | ~3.8 |
+| 8 | ~3.0 |
+| 12 | ~2.5 |
+
+**On a board with 5 empty cells, asking for depth 8 gets about depth 4.** Only
+at 2-3 empties does a depth-8 request actually expand eight layers.
+
+Confirmed by node count rather than by the algebra alone: the adaptive 4/6/8
+schedule costs 48.6 ms/move at roughly 364k nodes/move. An unpruned depth-8
+expectimax is many orders of magnitude larger, so the tree is bounded by the
+cutoff throughout.
+
+**Consequences.**
+
+1. The old "depth 5 ties depth 4" result is even weaker than E23 flagged. Not
+   only were depth and cutoff varied together — at a fixed cutoff, raising the
+   depth *setting* barely raises the depth actually searched on open boards.
+   Depth 5 cost only 3.5x depth 4 at a matched cutoff, which is the signature of
+   a tree bounded by something other than depth.
+2. `0.0015` has never been swept. It appears nowhere in the source — it is a CLI
+   value that entered through the README's headline command and was inherited by
+   every run since. It is the single most consequential untuned search
+   parameter in the project.
+3. E33 (adaptive 4/6/8) is therefore a *partial* test of the E31 diagnosis: it
+   does deepen search on 2-3 empty boards, which is the regime E31 implicates,
+   but leaves 4-5 empty boards at roughly their old depth. A cutoff sweep is the
+   natural follow-up and tests the same hypothesis more directly.
+
+---
+
+## E31 — Where the rebuild actually fails  ⭐⭐ OVERTURNS E26'S DIAGNOSIS
+
+E26 concluded: *"It reaches 16384 and then never rebuilds the second one — a
+~100-move strategic task, far beyond any search horizon, so it can only come
+from the value function."* That sentence set the roadmap: it is why deeper
+search was deprioritised and why the endgame tablebase was abandoned a second
+time. It is wrong.
+
+160 games at depth 4 on `n12_plain_2M` (`scratchpad/autopsy.cpp`), recording for
+every game that reached 16384 the **largest second tile ever held beside it**:
+
+| Largest second tile | Games | Share |
+|---|---:|---:|
+| 4096 | 21 | 13.8% |
+| **8192** | **127** | **83.6%** |
+| 16384 (completed) | 4 | 2.6% |
+
+**83.6% of games reach `16384 + 8192` — one merge short of a second 16384.**
+The agent does not fail to rebuild. It completes the rebuild and then fails to
+convert, 97% of the time.
+
+### The same fact stated as a rung
+
+| Task | Free cells | Success |
+|---|---:|---:|
+| Build an 8192 with one cell locked | 15 | 95.5% |
+| Build an 8192 with two cells locked | 14 | ~3% |
+
+One fewer free cell, roughly 32x worse. Both need the identical ladder
+(4096+2048+...+2, twelve cells); only the space to manoeuvre in differs. That is
+a **tight-board execution** problem, not a long-horizon planning problem.
+
+### Two numbers from this run that must NOT be quoted
+
+- *"Mean free cells at death = 0.00."* A tautology. A 2048 game can only end on
+  a full board — if a cell is empty some move is legal. The metric measures
+  nothing and is dropped.
+- *"Max tile in a corner at death: 31.2%."* Suggestive of structural collapse,
+  but measured after the agent has already been thrashing, and pooled over
+  games that never reached 16384. Not evidence for anything yet.
+
+### What follows
+
+Precision on a nearly-full board is exactly what search depth buys, and the
+repository has had an `AdaptiveDepthSchedule` (depth 4 / 6 / 8 by empty-cell
+count) since Phase 1 that **has never once been run with a learned evaluator**.
+It was unreachable: the CLI only accepted `--adaptive-schedule` together with
+`--search timed`, so using it forced a wall-clock deadline, which makes a run
+depend on machine speed and on how many games share the machine — neither
+reproducible nor parallelisable. Fixed-depth + schedule is now accepted, which
+makes the thing deterministic and therefore benchmarkable.
+
+---
+
+## E30 — The 32768 cliff is NOT a scale-transfer failure  ❌ HYPOTHESIS REFUTED
+
+Recorded because the reasoning was persuasive and wrong, and the refutation cost
+ten minutes against the eight hours the experiment would have cost.
+
+**Hypothesis.** The tuples index raw exponents in 4 bits, so the pattern
+`(13,12,11,10,9,8)` and the pattern `(14,13,12,11,10,9)` — the same shape one
+scale apart — share exactly zero weights. The first is visited in nearly every
+game and the second almost never, so the rebuild skill the agent executes at
+95% cannot transfer one scale up. That would make the cliff representational,
+and the additive rank-relative bank would be its fix.
+
+**Test, on the network alone — no training, no games**
+(`scratchpad/scaleprobe.cpp`). Sample real boards from self-play, rank the legal
+moves by `reward + V(afterstate)`, then rewrite every occupied cell's exponent
++1 and re-rank. 2048's dynamics are scale-invariant for a fixed shape, so a
+network that generalises across scale should choose the same move.
+
+| Boards with max tile | Shift up to | Same best move |
+|---|---|---:|
+| 1024 | 2048 | 79.2% |
+| 2048 | 4096 | 73.7% |
+| 4096 | 8192 | 77.0% |
+| **8192** | **16384 (untrained)** | **76.3%** |
+
+Agreement at the boundary into untrained territory is **indistinguishable** from
+boundaries wholly inside trained territory. ~76% is simply how sensitive a move
+ranking is to relabelling. There is no coverage-specific deficit at 16384.
+
+**Why the reasoning failed.** The claim about indices is true; the inference from
+it is not. Shifting the whole board moves *every* lookup, and most of the 40
+land on well-trained entries either way, so the ordering survives. Only the
+tuples containing the largest tile enter novel territory — roughly 15 of 40 —
+and that is not enough to break the ranking.
+
+**Consequence.** The rank-relative bank is implemented and tested
+(`--relative-bank`, 10.6 MB) but has no measured defect to repair, and the
+8-hour matched-pair run staged for it was cancelled. Kept because it is built,
+costs nothing unused, and may still matter if a coverage deficit is ever
+demonstrated — but it is no longer justified by this argument.
+
+**The rule this repeats.** The log already says mechanism-based reasoning has
+been wrong every time it has been checked here. It was wrong again. Probe the
+mechanism on the artefact before spending the machine on it.
+
+---
+
+## E29 — Every depth-1 conclusion re-measured at n=10,000  ⭐⭐ SEVERAL REVERSED
+
+**Why this was possible all along.** A depth-1 game costs about **9 ms**. n=200
+therefore costs 2 seconds and n=10,000 costs 90. Every training conclusion in
+this project was drawn at n=200-300 out of habit, at a detectable-effect floor
+of ~9%, while the effects being tested were 2-6%. Nothing about the machine
+prevented n=10,000; nobody tried it.
+
+Same seeds (30000-39999), same search (depth 1, no cutoff), MDE ~1.1%:
+
+| Network | Score | vs `n5_large_1M` | vs matched control | On record |
+|---|---:|---:|---:|---:|
+| `n12_plain_2M` (2M games) | **240,366 ± 2,601** | **+5.2%** | — | 237,027 (n=60) |
+| `n17_structural` (+100k, structural) | 235,800 | +3.2% | **+0.5% tie** | "worse" |
+| `n9_ext_1M1` (+100k, control) | 234,548 | +2.6% | — | 242,440 (n=200) |
+| `n19_distill` (+100k, distill) | 230,505 | +0.9% | **−1.7%** | "worse" |
+| `n15_seeded` (+100k, seeded) | 230,305 | +0.8% | **−1.8%** | "tie" |
+| `n5_large_1M` | 228,532 | — | — | 226,325 (n=200) |
+| `n10_global_ext` (global feats) | **207,550** | **−9.2%** | — | 234,885 (n=60) → "+3.8%" |
+| `n13_xlarge_1M` (512 MB) | **150,778** | **−34.0%** | — | "−32%" |
+
+### What reverses
+
+**"More training beyond 1M games: no gain" is wrong.** 1M -> 2M is **+5.2%**,
+about 4.5 standard errors out. 1M -> 1.1M is +2.6%. The gains were always there;
+an n=60 benchmark could not see them. This matters more than any other line in
+the table, because it is the *only* intervention here that works.
+
+**"Global features +3.8% at depth 1" is wrong, and the sign flips.** That claim
+compared an n=60 run (234,885) against a separate n=200 run (226,325) — two
+samples with ~9% and ~5% floors. On the same 10,000 seeds it is **−9.2%**, which
+finally agrees with the depth-4 result (−6.8%) instead of contradicting it.
+E18's "retracted twice — post-fix they win at BOTH depths" does not survive.
+
+**`xlarge` stands.** −34.0% at n=10,000 against −32% at n=60. The 512 MB shape
+really is much worse at 1M games.
+
+### The control that matters
+
+`n9_ext_1M1` is the matched control for the feature experiments: same resume,
+same seed, same alpha, same 100k extra games, differing only in the feature
+under test (documented for `n15_seeded` at E28; inferred for `n17`/`n19` from
+their file sizes and scores, because **the result files record the weight file
+but not the training recipe** — a provenance gap worth closing).
+
+Measured against that control rather than against `n5_large_1M`, **every
+feature-based intervention is a tie or a loss.** What moved `n17_structural` and
+`n19_distill` was the 100k extra games, not the feature. The apparent +3.2% for
+structural features is +0.5% once its own control is subtracted.
+
+### Consequence
+
+The ledger of things that have ever improved this network reduces to one entry:
+**more training**. Every architectural and feature idea tried here — global
+features, structural features, distillation, endgame seeding, a bigger tuple
+set, multi-stage splits, relative indexing — is a tie or worse against a matched
+control. That reframes the roadmap: the bottleneck is not ideas, it is
+training throughput, which is single-threaded.
+
+---
+
+## E28b — The benchmark could not see what it was being asked to judge  ⚠️ METHODOLOGY
+
+Recomputed from the committed per-game CSVs, not from a new run.
+
+**At n=60 the depth-4 benchmark resolves ~9%.** Per-game sd is ~85,000 on a
+~356,000 mean, so the minimum detectable effect at 80% power is 29,000-38,000.
+Every Phase-4 "tie" sits inside that band:
+
+| Attempt | delta | Inside the noise floor? |
+|---|---:|---|
+| Endgame-seeded | −0.8% | yes |
+| 2M games | −2.9% | yes |
+| Distillation | −4.0% | yes |
+| Structural features | −4.0% | yes |
+| Split at 16384 | −6.4% | yes |
+| Global features | −6.8% | yes |
+
+"Eight attempts all tied" was really "eight attempts produced effects this
+benchmark cannot resolve." Which is not the same claim, and led to the wrong
+one: **"search masks evaluator improvements" is not established by this data.**
+The depth-1 gains were 2-6%; nothing that size could have shown up at n=60.
+
+**Matched seeds do not help, and `compare_runs.py` claimed they did.** The tool
+asserted pairing "shrinks the standard error several-fold". Measured per-seed
+correlation between runs is **r ~ 0** — −0.10 to +0.27 at depth 4, ±0.08 at
+depth 1 (n=200). The seed fixes the spawn *stream*, but which cell each spawn
+lands in depends on the moves played, so two agents decorrelate within a few
+moves and "the same seed" is not the same game. Pairing is harmless and useless;
+sample size is the only lever.
+
+**Fixes shipped.** `GameRunner` now runs games across worker threads
+(`--threads N`): scores are bit-identical at any worker count (pinned by
+`GATE: parallel runner reproduces serial scores`), **3.43x** measured on this
+8-core M1, and the result file records `worker_threads` / `timing_valid` so a
+parallel run can never be quoted as a timing result. `compare_runs.py` now
+reports the effect a run was powered to detect and returns UNDERPOWERED rather
+than "tie" when it could not have seen the difference it is being asked about.
+
+### Corrected headline
+
+**`n5_large_1M` at depth 4, cutoff 0.0015, n=200: 344,399** — not 356,178.
+The published figure came from n=60 on the first 60 of the same seeds and is
+3.3% optimistic.
+
+---
+
 ## E28 — Endgame-seeded training  ⏸ RUNNING
 
 The remaining candidate, and the only one addressing E26's measured cause.

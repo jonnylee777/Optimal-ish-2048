@@ -148,6 +148,42 @@ inline constexpr std::size_t kStructuralFeatureSize = 512;
 
 [[nodiscard]] std::size_t structural_feature_index(Board board) noexcept;
 
+
+// A RANK-RELATIVE second bank of tuple tables, summed on top of the absolute
+// ones rather than replacing them.
+//
+// This is the additive form of the idea E27 rejected. E27 replaced absolute
+// indexing with relative and lost 2.7x, and its diagnosis was right: made
+// scale-blind, the network could no longer tell which regime it was in.
+// Replacing was never the only option. Summing keeps the absolute tables --
+// and therefore every bit of scale information and all 83.9M trained weights --
+// and adds a second, coarser view that generalises across scales.
+//
+// Why this attacks the actual ceiling. An autopsy of 40 games found 38 died
+// having never assembled a second 16384. Rebuilding beneath a locked 16384 is
+// the same task the agent already performs in 97% of games one scale lower,
+// but under absolute indexing {16384,8192,4096} and {2048,1024,512} occupy
+// unrelated entries, so none of that competence transfers. The relative bank
+// makes them the same entry by construction, so experience earned in the
+// common regime reaches the rare one WITHOUT having to visit it.
+//
+// Encoding: per cell, 0 for empty, otherwise 1 + min(7, max_exponent -
+// exponent). Nine states per cell, so a 6-tuple table is 9^6 = 531,441 entries
+// -- 2.1 MB against the absolute tuple's 67 MB. Five tuples cost 10.6 MB, which
+// is why this is worth trying even at a low prior: it is 3% more memory, not
+// another 320 MB.
+//
+// Clamping the drop at 7 is deliberate. Cells more than seven doublings below
+// the board maximum are noise as far as the large-tile structure is concerned,
+// and giving them their own codes would fragment the table for nothing.
+//
+// The bank is laid out AFTER the feature tables, so `tuple_weight_count()` and
+// therefore `adopt_tuple_weights()` are unchanged: a fully trained absolute
+// network can be resumed into a bank-enabled one with the bank starting at
+// zero, which keeps "does the bank help" separate from "is this run long
+// enough".
+[[nodiscard]] std::size_t relative_bank_lut_size(std::size_t cell_count) noexcept;
+
 enum class IndexingMode : std::uint8_t {
     absolute,
     relative,
@@ -164,11 +200,14 @@ public:
                            bool global_features = false,
                            IndexingMode indexing = IndexingMode::absolute,
                            std::uint8_t stage_base_exponent = 10,
-                           bool structural_features = false);
+                           bool structural_features = false,
+                           bool relative_bank = false);
 
     [[nodiscard]] bool has_structural_features() const noexcept {
         return structural_features_;
     }
+
+    [[nodiscard]] bool has_relative_bank() const noexcept { return relative_bank_; }
 
     [[nodiscard]] std::uint8_t stage_base_exponent() const noexcept {
         return stage_base_exponent_;
@@ -207,6 +246,25 @@ public:
     [[nodiscard]] std::size_t stage_count() const noexcept { return stage_count_; }
 
     [[nodiscard]] double value(Board board) const noexcept;
+
+    // Makes value()/update() use relaxed atomic accesses to the weight array.
+    //
+    // Hogwild-style parallel TD has several threads reading and writing the
+    // same weights with no locking. Lost updates are fine and are the point --
+    // 40 weights out of 83.9M are touched per update, so collisions are rare
+    // and the noise they add is smaller than the noise TD already has. What is
+    // NOT fine is a plain (non-atomic) concurrent read/write, which is a data
+    // race and therefore undefined behaviour, however benign it looks.
+    //
+    // Gated on a runtime flag rather than applied unconditionally so the
+    // single-threaded path stays exactly the code it was: the branch is on one
+    // member bool per call, hoisted out of the 40-weight loop, and perfectly
+    // predicted. On ARM64 and x86-64 a relaxed atomic load/store of a float
+    // compiles to the same instruction as a plain one, so the concurrent path
+    // costs nothing either -- the flag exists for provable equivalence, not for
+    // speed.
+    void set_concurrent(bool concurrent) noexcept { concurrent_ = concurrent; }
+    [[nodiscard]] bool concurrent() const noexcept { return concurrent_; }
 
     // Adds `per_weight_delta` to every weight active for `board`. This is the
     // whole of the TD update's write side; the caller is responsible for
@@ -262,6 +320,10 @@ private:
     struct Tuple {
         std::size_t lut_offset{};   // into weights_
         std::size_t lut_size{};     // 16^n
+        // Same cells, same orderings, indexed base 9 by rank-relative codes.
+        // Zero-sized when the relative bank is off.
+        std::size_t relative_offset{};
+        std::size_t relative_size{};  // 9^n
         // One entry per distinct symmetric ordering; each is a list of
         // nibble shifts (4 * cell) in most-significant-first order.
         std::vector<std::vector<std::uint8_t>> ordering_shifts;
@@ -269,6 +331,16 @@ private:
 
     [[nodiscard]] std::size_t index_of(
         std::uint64_t packed, const std::vector<std::uint8_t>& shifts) const noexcept;
+    [[nodiscard]] std::size_t relative_index_of(
+        std::uint64_t codes, const std::vector<std::uint8_t>& shifts) const noexcept;
+
+    // Templated on the access mode so `concurrent_` is tested once per call
+    // rather than once per weight, and the 40-weight loop compiles to exactly
+    // the code it did before this existed. Instantiated only in the .cpp.
+    template <bool Concurrent>
+    [[nodiscard]] double value_impl(Board board) const noexcept;
+    template <bool Concurrent>
+    void update_impl(Board board, double per_weight_delta) noexcept;
 
     // Offset into weights_ for `board`'s stage. Zero for a single-stage
     // network, so the common case costs nothing.
@@ -287,6 +359,8 @@ private:
     IndexingMode indexing_{IndexingMode::absolute};
     std::uint8_t stage_base_exponent_{10};
     bool structural_features_{false};
+    bool relative_bank_{false};
+    bool concurrent_{false};
     std::size_t structural_offset_{};
     std::size_t global_offset_{};  // into a stage, where the global table starts
 };

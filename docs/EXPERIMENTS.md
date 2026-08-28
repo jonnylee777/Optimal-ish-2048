@@ -102,6 +102,7 @@ every update generalizes across symmetries.
 | `large` tuple shape (128 -> 320 MB) | +20.8% | p=6e-09, n=300 |
 | Terminal-position fix (bug) | **+48% at depth 4** | same weights |
 | Training 100k -> 1M games | +68% | n=200 |
+| Training 1M -> 2M games | **+5.2%** | n=10,000 — previously filed as "no gain" from n=60 |
 
 ### Changes that did not
 
@@ -111,8 +112,17 @@ every update generalizes across symmetries.
 | Optimistic init alone | +27.7% | n=300 |
 | Optimistic init **with** temporal coherence | **−14.9%** | substitutes, not complements |
 | Multi-stage networks | −19.4% | p=8e-09 |
-| `xlarge` shape (512 MB) | −21% at 100k, worse again at 1M | n=300 / n=60 |
+| `xlarge` shape (512 MB) | **−34.0%** | n=10,000 (was −21% at n=60) |
 | Symmetry reduction in search | 60% slower | timed A/B |
+| Whole-board (global) feature | **−9.2%** | n=10,000 — recorded as +3.8% from an n=60 vs n=200 comparison; sign reverses |
+| Endgame-seeded training | **−1.8%** | p=0.001, n=10,000, vs its matched control |
+| Distillation from depth-4 search | −1.7% | n=10,000, vs matched control |
+| Structural (snake-order) features | +0.5% | n=10,000 — a measured tie, not "worse" |
+
+Every entry below the rule is measured against `n9_ext_1M1`, the control that
+got the same 100k extra games without the feature. Against `n5_large_1M`
+instead, three of them look positive; the difference is the extra training, not
+the feature.
 
 ### Learning-rate finding
 
@@ -150,7 +160,7 @@ whole-board features. All were measuring the bug.
 
 ## Phase 4 — attempts on the 32768 ceiling
 
-**Diagnosis first.** An autopsy of 40 depth-4 games
+**Diagnosis — SUPERSEDED.** An autopsy of 40 depth-4 games
 (`scratchpad/endgame_autopsy.cpp`, not committed) classified each death:
 
 | Cause | Games |
@@ -158,6 +168,22 @@ whole-board features. All were measuring the bug.
 | Never assembled a second 16384 | 38 |
 | Large-tile chain broken | 2 |
 | Jammed / one merge short | 0 |
+
+That "0 one merge short" drove the roadmap for months — it is why deeper search
+was deprioritised and the tablebase dropped a second time. A 160-game autopsy
+(`scratchpad/autopsy.cpp`) measuring *how far* the rebuild gets contradicts it:
+
+| Largest second tile held beside a 16384 | Games | Share |
+|---|---:|---:|
+| 4096 | 21 | 13.8% |
+| **8192** | **127** | **83.6%** |
+| 16384 (converted) | 4 | 2.6% |
+
+**83.6% reach one merge short and fail to convert.** Building an 8192 with one
+cell locked succeeds 95.5%; with two cells locked, ~3%. At that point the board
+must hold a tile sum near 32,768, which is essentially a full clean ladder across
+14 of 16 cells — almost no slack. It is a precision-on-a-full-board problem,
+which is what search depth buys.
 
 **Attempts** (all at depth 4, n=60, against 356,178):
 
@@ -172,10 +198,14 @@ whole-board features. All were measuring the bug.
 | Tile downgrading | 49,638 (1-ply eval) |
 | TD(lambda=0.5) | 222,296 |
 
-**Conclusion.** None beat the baseline. The recurring explanation — confirmed
-three times independently — is that at depth 4 search already compensates for
-value-function weaknesses, so improvements register at depth 1 and vanish at
-depth 4.
+**Conclusion — WITHDRAWN.** "None beat the baseline" was read as evidence that
+search compensates for value-function weaknesses. It is not. Every row above is
+n=60, where this benchmark resolves ~9%, and the effects were 2-7%. They were
+unmeasured, not measured equal. Re-run at n=10,000 (depth 1) against matched
+controls, the ordering is different and one intervention — more training — is
+clearly positive. Whether depth-1 gains survive to depth 4 remains open: the one
+properly powered pair is +5.2% at depth 1 and +0.3% at depth 4 (n=200, p=0.89),
+which n=200 cannot resolve either way.
 
 ## Neural value network — in progress
 

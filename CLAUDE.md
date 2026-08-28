@@ -8,13 +8,16 @@ A C++20 research project building the strongest 2048-playing agent that fits on
 an 8 GB laptop, by measuring genuinely different approaches against each other
 under one benchmark harness.
 
-**Current best agent: 356,178 mean score** — `experiments/weights/n5_large_1M.bin`
-(a learned 320 MB n-tuple network) played at fixed search depth 4.
+**Current best agent: 345,380 mean score (n=200)** —
+`experiments/weights/n12_plain_2M.bin` (a learned 320 MB n-tuple network) played
+at fixed search depth 4. The long-published 356,178 was an n=60 figure and is
+3.3% optimistic.
 
 ```sh
 ./build-release/run_experiment --heuristic N1 \
-  --weights experiments/weights/n5_large_1M.bin \
-  --search fixed --depth 4 --probability-cutoff 0.0015 --seeds 30000-30059
+  --weights experiments/weights/n12_plain_2M.bin \
+  --search fixed --depth 4 --probability-cutoff 0.0015 \
+  --seeds 30000-30199 --threads 8
 ```
 
 ## Build and test
@@ -58,16 +61,39 @@ network), `adversarial_2048`, `optimize_baseline`, `optimize_structural`.
 This project has retracted five conclusions to sloppy measurement. The rules
 below are not ceremony.
 
-- **n >= 200 for any keep/reject decision.** Per-game scores span ~3,000 to
-  ~580,000; n=10 ranks configurations *wrongly*.
-- **Use `tools/compare_runs.py`** for a paired significance test between two
-  runs. Report p-values, not just means.
+- **Know what your n can see, before you run it.** At depth 4 this benchmark
+  resolves ~9% at n=60, ~5% at n=200, ~3% at n=600. Most ideas here are worth
+  2-7%, so n=60 cannot distinguish any of them from a tie — and eight were filed
+  as ties on exactly that basis. `compare_runs.py` now prints the effect a run
+  was powered to detect and returns UNDERPOWERED rather than "tie".
+- **Depth-1 comparisons should use n=10,000, not 200.** A depth-1 game costs
+  ~9 ms, so n=10,000 takes ~90 seconds and resolves ~1.1%. Every historical
+  depth-1 conclusion was drawn at n=200-300 out of habit; several reversed when
+  re-run properly.
+- **`--threads N` buys sample size for free.** Scores are bit-identical at any
+  worker count (pinned by a GATE test); only per-move timing is contended, and
+  the result file records `worker_threads`/`timing_valid`. Measured 3.4x here.
+- **Matched seeds do NOT reduce variance for score.** Measured per-seed
+  correlation between two runs is ~0 — two agents decorrelate within a few moves,
+  so "the same seed" is not the same game. Pairing *does* help for tile-rate
+  endpoints (r ~ 0.5); use `--metric tile:32768` for those.
+- **Judge an intervention on the metric it targets.** Endgame seeding was built
+  to raise the 32768 rate at depth 4 and was rejected on mean score at depth 1,
+  where P(32768) is ~1/10,000 for every network ever trained here.
 - **Change one variable at a time.** Varying depth and probability cutoff
   together once produced a retracted conclusion.
 - **Match seeds** across compared runs. Seed `30000-30299` is the N-series
   comparison set; H-series uses `20000-...`. Do not compare across sets.
 - **Improvements that fix the same weakness are substitutes, not additive.**
-  Measured three times. Always test the combination rather than assuming.
+  Measured three times — though all three at n=60, so treat it as a prior, not a
+  result.
+- **Probe the mechanism on the artefact before spending the machine on it.**
+  Mechanism-based reasoning has been wrong here every time it has been checked.
+  The most recent: "the tuples index raw exponents, so a rebuild under a 16384
+  shares no weights with one under an 8192, and the skill cannot transfer." True
+  about the indices, false about the behaviour — move-ranking agreement across a
+  one-scale shift is ~76% at *every* boundary, trained or not. A ten-minute probe
+  killed an eight-hour experiment.
 - **No timed-regime benchmark while training runs** — contention silently
   understates it.
 - Results land in `experiments/results/phase1-heuristics/` or

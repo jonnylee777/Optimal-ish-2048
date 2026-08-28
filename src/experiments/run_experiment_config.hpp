@@ -46,6 +46,10 @@ struct RunExperimentConfig {
     // Weight file for learned evaluators (N-series). Required for N1,
     // rejected for the hand-crafted H-series.
     std::filesystem::path weights_path;
+    // Games played concurrently, one agent per thread. Scores do not depend on
+    // this; per-move timing does, so it defaults to 1 and any run that reports
+    // speed must leave it there. See GameRunner::run.
+    std::size_t worker_threads{1};
     bool quiet{false};
 };
 

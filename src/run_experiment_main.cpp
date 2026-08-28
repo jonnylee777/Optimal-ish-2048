@@ -39,10 +39,11 @@ void print_usage(const char* program) {
         << "    --heuristic H0|H1|H2|H3|H4|H5|N1 [--weight name=value ...] \\\n"
         << "    [--weights PATH]      # required for N1 (learned evaluator)\n"
         << "    --search fixed|timed \\\n"
-        << "    [--depth N] [--time-limit-ms N] [--adaptive-schedule H,M,L] \\\n"
+        << "    [--depth N | --adaptive-schedule H,M,L] [--time-limit-ms N] \\\n"
         << "    [--transposition-table on|off] [--tt-capacity N] \\\n"
         << "    [--probability-cutoff X] [--symmetry on|off] \\\n"
         << "    --seeds quick|standard|final|FIRST-LAST [--games N] \\\n"
+        << "    [--threads N]         # concurrent games; timing invalid above 1\n"
         << "    [--output-dir DIR] [--quiet]\n";
 }
 
@@ -188,26 +189,55 @@ int run(
 
     const auto search_name = evaluator_type + (config.search == a2048::SearchMode::fixed
         ? "-fixed" : "-timed");
-    std::unique_ptr<a2048::SearchAgent> agent =
-        config.use_adaptive_schedule
-        ? std::make_unique<a2048::SearchAgent>(
-              evaluator,
-              a2048::AdaptiveDepthSchedule{
-                  config.adaptive_depths.high_empty_depth,
-                  config.adaptive_depths.medium_empty_depth,
-                  config.adaptive_depths.low_empty_depth,
-              },
-              search_name, options)
-        : std::make_unique<a2048::SearchAgent>(evaluator, config.fixed_depth, search_name, options);
+    const auto make_agent = [&] {
+        return config.use_adaptive_schedule
+            ? std::make_unique<a2048::SearchAgent>(
+                  evaluator,
+                  a2048::AdaptiveDepthSchedule{
+                      config.adaptive_depths.high_empty_depth,
+                      config.adaptive_depths.medium_empty_depth,
+                      config.adaptive_depths.low_empty_depth,
+                  },
+                  search_name, options)
+            : std::make_unique<a2048::SearchAgent>(
+                  evaluator, config.fixed_depth, search_name, options);
+    };
+
+    // One agent per worker: each owns a transposition table and search
+    // statistics, which threads must not share. The evaluator is shared by
+    // const reference -- safe because no evaluator in this project holds
+    // mutable state.
+    std::vector<std::unique_ptr<a2048::SearchAgent>> agents;
+    std::vector<a2048::Agent*> agent_pointers;
+    const auto worker_threads = std::max<std::size_t>(1, config.worker_threads);
+    agents.reserve(worker_threads);
+    agent_pointers.reserve(worker_threads);
+    for (std::size_t index = 0; index < worker_threads; ++index) {
+        agents.push_back(make_agent());
+        agent_pointers.push_back(agents.back().get());
+    }
+    auto& agent = agents.front();
 
     if (!config.quiet) {
         std::cout << "running " << config.run_config.game_count << " games ("
                   << config.seed_set_label << ", seeds " << config.run_config.first_seed
                   << '-' << (config.run_config.first_seed + config.run_config.game_count - 1)
-                  << ")...\n";
+                  << ")";
+        if (worker_threads > 1) {
+            std::cout << " on " << worker_threads
+                      << " threads -- SCORES ARE VALID, PER-MOVE TIMING IS NOT";
+        }
+        std::cout << "...\n";
     }
 
-    const auto result = a2048::GameRunner::run(*agent, config.run_config);
+    const auto result = a2048::GameRunner::run(agent_pointers, config.run_config);
+
+    // Fold every worker's statistics into the first agent, so the metadata
+    // below describes the whole run rather than whichever share of the games
+    // one thread happened to take.
+    for (std::size_t index = 1; index < agents.size(); ++index) {
+        agent->merge_statistics(*agents[index]);
+    }
 
     std::optional<double> deadline_hit_rate;
     if (!config.use_adaptive_schedule) {

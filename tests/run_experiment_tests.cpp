@@ -166,6 +166,36 @@ void test_metrics_worst_score_median_moves_and_distribution() {
     CHECK(metrics.achievement_rates.tile_65536 == 0.25);
 }
 
+
+// The depth schedule must be usable WITHOUT a time limit. Coupling the two made
+// the schedule untestable: a timed run's strength depends on machine speed and
+// on how many games share the machine, so it can be neither reproduced nor
+// parallelised. Fixed + schedule is deterministic and therefore benchmarkable.
+void test_fixed_search_accepts_adaptive_schedule() {
+    const auto config = a2048::parse_run_experiment_args(
+        {"--heuristic", "N1", "--weights", "w.bin", "--search", "fixed",
+         "--adaptive-schedule", "4,6,8", "--seeds", "30000-30009"});
+    CHECK(config.use_adaptive_schedule);
+    CHECK(config.adaptive_depths.high_empty_depth == 4);
+    CHECK(config.adaptive_depths.medium_empty_depth == 6);
+    CHECK(config.adaptive_depths.low_empty_depth == 8);
+    CHECK(config.time_limit_ms == 0.0);
+
+    // Still mutually exclusive with an explicit depth, and one of them is still
+    // required -- lifting the restriction must not make the depth optional.
+    CHECK_THROWS(a2048::parse_run_experiment_args(
+        {"--heuristic", "H1", "--search", "fixed", "--depth", "4",
+         "--adaptive-schedule", "4,6,8", "--seeds", "quick"}));
+    CHECK_THROWS(a2048::parse_run_experiment_args(
+        {"--heuristic", "H1", "--search", "fixed", "--seeds", "quick"}));
+    CHECK_THROWS(a2048::parse_run_experiment_args(
+        {"--heuristic", "H1", "--search", "fixed", "--adaptive-schedule", "4,0,8",
+         "--seeds", "quick"}));
+    CHECK_THROWS(a2048::parse_run_experiment_args(
+        {"--heuristic", "H1", "--search", "fixed", "--adaptive-schedule", "4,6,8",
+         "--time-limit-ms", "250", "--seeds", "quick"}));
+}
+
 }  // namespace
 
 int main() {
@@ -180,6 +210,8 @@ int main() {
         {"timed search defaults to adaptive schedule", test_timed_search_defaults_to_adaptive_schedule},
         {"timed search with flat depth ceiling", test_timed_search_with_flat_depth_ceiling},
         {"unrecognized flag rejected", test_unrecognized_flag_rejected},
+        {"fixed search accepts an adaptive schedule",
+         test_fixed_search_accepts_adaptive_schedule},
         {"full valid fixed config", test_full_valid_fixed_config},
         {"metrics worst/median/distribution", test_metrics_worst_score_median_moves_and_distribution},
     };

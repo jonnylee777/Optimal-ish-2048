@@ -190,6 +190,12 @@ RunExperimentConfig parse_run_experiment_args(const std::vector<std::string>& ar
         } else if (flag == "--tt-capacity") {
             config.transposition_table_capacity = static_cast<std::size_t>(
                 parse_u64(require_value(args, index, flag), "--tt-capacity"));
+        } else if (flag == "--threads") {
+            config.worker_threads = static_cast<std::size_t>(
+                parse_u64(require_value(args, index, flag), "--threads"));
+            if (config.worker_threads == 0) {
+                throw std::invalid_argument("--threads must be at least 1");
+            }
         } else if (flag == "--probability-cutoff") {
             config.probability_cutoff = parse_f64(require_value(args, index, flag), "--probability-cutoff");
         } else if (flag == "--symmetry") {
@@ -221,20 +227,43 @@ RunExperimentConfig parse_run_experiment_args(const std::vector<std::string>& ar
     }
 
     if (config.search == SearchMode::fixed) {
-        if (!depth_given) {
-            throw std::invalid_argument("--depth is required for --search fixed");
+        // The depth SCHEDULE and the time LIMIT are independent choices, and
+        // coupling them used to make the schedule untestable. "Search deeper
+        // when few cells are empty" is a statement about where depth is worth
+        // spending; it does not require a deadline, and pairing it with one
+        // makes the result depend on machine speed and on how many games run
+        // concurrently -- so it could be neither reproduced nor parallelised.
+        //
+        // Fixed + schedule means: pick the depth by empty count, always
+        // complete it. Deterministic, so --threads applies and scores are
+        // identical at any worker count.
+        //
+        // This matters because a 160-game autopsy found 83.6% of games reach
+        // 16384 + 8192 -- one merge short of a second 16384 -- and fail to
+        // convert. That is a tight-board execution problem, exactly where a
+        // low-empty-cell depth bump is aimed, and the schedule had never once
+        // been run with a learned evaluator.
+        if (!depth_given && !adaptive_schedule_given) {
+            throw std::invalid_argument(
+                "--depth or --adaptive-schedule is required for --search fixed");
         }
-        if (config.fixed_depth == 0) {
+        if (depth_given && adaptive_schedule_given) {
+            throw std::invalid_argument("--depth and --adaptive-schedule are mutually exclusive");
+        }
+        if (depth_given && config.fixed_depth == 0) {
             throw std::invalid_argument("--depth must be at least 1");
+        }
+        if (adaptive_schedule_given &&
+            (config.adaptive_depths.high_empty_depth == 0 ||
+             config.adaptive_depths.medium_empty_depth == 0 ||
+             config.adaptive_depths.low_empty_depth == 0)) {
+            throw std::invalid_argument("--adaptive-schedule depths must be at least 1");
         }
         if (time_limit_given) {
             throw std::invalid_argument("--time-limit-ms is not valid with --search fixed");
         }
-        if (adaptive_schedule_given) {
-            throw std::invalid_argument("--adaptive-schedule is not valid with --search fixed");
-        }
         config.time_limit_ms = 0.0;
-        config.use_adaptive_schedule = false;
+        config.use_adaptive_schedule = adaptive_schedule_given;
     } else {
         if (!time_limit_given || config.time_limit_ms <= 0.0) {
             throw std::invalid_argument("--time-limit-ms (> 0) is required for --search timed");

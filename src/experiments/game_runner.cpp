@@ -3,12 +3,16 @@
 #include "core/board.hpp"
 #include "game/game.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <exception>
 #include <limits>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 namespace adversarial_2048 {
@@ -172,6 +176,18 @@ ExperimentMetrics ExperimentResult::metrics() const {
 }
 
 ExperimentResult GameRunner::run(Agent& agent, RunConfig config) {
+    return run(std::vector<Agent*>{&agent}, config);
+}
+
+ExperimentResult GameRunner::run(const std::vector<Agent*>& agents, RunConfig config) {
+    if (agents.empty()) {
+        throw std::invalid_argument("experiment needs at least one agent");
+    }
+    for (const auto* agent : agents) {
+        if (agent == nullptr) {
+            throw std::invalid_argument("experiment agent must not be null");
+        }
+    }
     if (config.game_count == 0) {
         throw std::invalid_argument("experiment must contain at least one game");
     }
@@ -180,41 +196,88 @@ ExperimentResult GameRunner::run(Agent& agent, RunConfig config) {
         throw std::invalid_argument("experiment seed range exceeds uint64_t");
     }
 
+    const auto worker_count = std::min(agents.size(), config.game_count);
     ExperimentResult experiment{
-        std::string(agent.name()),
+        std::string(agents.front()->name()),
         config,
-        {},
+        std::vector<GameRecord>(config.game_count),
         0.0,
+        worker_count,
     };
-    experiment.games.reserve(config.game_count);
     const auto experiment_start = std::chrono::steady_clock::now();
 
-    for (std::size_t game_index = 0; game_index < config.game_count; ++game_index) {
-        const auto game_start = std::chrono::steady_clock::now();
-        const auto seed = config.first_seed + game_index;
-        Game game(seed);
-        agent.reset(decision_seed(seed));
+    // Games are written by index into a pre-sized vector, so the output order
+    // is the seed order regardless of which worker finished when. Distinct
+    // indices means distinct elements, so no synchronisation is needed on the
+    // vector itself.
+    std::atomic<std::size_t> next_game{0};
+    std::exception_ptr first_failure;
+    std::mutex failure_mutex;
 
-        while (!game.game_over()) {
-            const auto direction = agent.choose_move(game.board());
-            if (!direction.has_value()) {
-                throw std::logic_error("agent returned no move for a playable board");
+    const auto worker = [&](Agent& agent) {
+        try {
+            while (true) {
+                const auto game_index = next_game.fetch_add(1, std::memory_order_relaxed);
+                if (game_index >= config.game_count) {
+                    return;
+                }
+                const auto game_start = std::chrono::steady_clock::now();
+                const auto seed = config.first_seed + game_index;
+                Game game(seed);
+                agent.reset(decision_seed(seed));
+
+                while (!game.game_over()) {
+                    const auto direction = agent.choose_move(game.board());
+                    if (!direction.has_value()) {
+                        throw std::logic_error("agent returned no move for a playable board");
+                    }
+                    const auto turn = game.apply_move(*direction);
+                    if (!turn.moved) {
+                        throw std::logic_error("agent selected an illegal move");
+                    }
+                }
+
+                const auto game_runtime = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - game_start).count();
+                experiment.games[game_index] = GameRecord{
+                    seed,
+                    game.score(),
+                    game.move_count(),
+                    max_exponent(game.board()),
+                    game_runtime,
+                };
             }
-            const auto turn = game.apply_move(*direction);
-            if (!turn.moved) {
-                throw std::logic_error("agent selected an illegal move");
+        } catch (...) {
+            // Record the first failure and stop handing out work, so a thrown
+            // agent error surfaces to the caller as it does on the serial path
+            // instead of terminating the process from a worker thread.
+            const std::lock_guard<std::mutex> guard(failure_mutex);
+            if (!first_failure) {
+                first_failure = std::current_exception();
             }
+            next_game.store(config.game_count, std::memory_order_relaxed);
         }
+    };
 
-        const auto game_runtime = std::chrono::duration<double>(
-            std::chrono::steady_clock::now() - game_start).count();
-        experiment.games.push_back(GameRecord{
-            seed,
-            game.score(),
-            game.move_count(),
-            max_exponent(game.board()),
-            game_runtime,
-        });
+    if (worker_count == 1) {
+        // Kept genuinely single-threaded rather than "one thread": a serial run
+        // is the timing reference, and spawning a thread for it would add
+        // scheduling noise to the numbers that decide search speed.
+        worker(*agents.front());
+    } else {
+        std::vector<std::thread> threads;
+        threads.reserve(worker_count - 1);
+        for (std::size_t index = 1; index < worker_count; ++index) {
+            threads.emplace_back([&worker, agent = agents[index]] { worker(*agent); });
+        }
+        worker(*agents.front());
+        for (auto& thread : threads) {
+            thread.join();
+        }
+    }
+
+    if (first_failure) {
+        std::rethrow_exception(first_failure);
     }
 
     experiment.runtime_seconds = std::chrono::duration<double>(

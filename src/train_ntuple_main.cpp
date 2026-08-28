@@ -48,6 +48,8 @@ void print_usage(const char* program) {
         << "  --tc-state PATH       persist TC accumulators here (enables real resume)\n"
         << "  --train-depth N       pick training actions by depth-N search (default 1)\n"
         << "  --structural-features add snake-order / cornered / empties features\n"
+        << "  --relative-bank       add rank-relative tuple tables (+10.6 MB, scale transfer)\n"
+        << "  --threads N           play N games concurrently (Hogwild); NOT bit-reproducible\n"
         << "  --relative-indexing   index tiles relative to the board max (scale transfer)\n"
         << "  --distill PATH        fit to (position, deep-search value) pairs first\n"
         << "  --distill-passes N    times to sweep the target set (default 1)\n"
@@ -103,6 +105,7 @@ int main(int argc, char* argv[]) {
     std::uint8_t stage_split = 10;
     bool promote_stages = false;
     bool structural_features = false;
+    bool relative_bank = false;
     bool adapt_features = false;
     std::uint64_t stages = 1;
     bool global_features = false;
@@ -131,6 +134,14 @@ int main(int argc, char* argv[]) {
                 config.evaluation_games = parse_u64(require_value(args, index, flag), flag);
             } else if (flag == "--structural-features") {
                 structural_features = true;
+            } else if (flag == "--relative-bank") {
+                relative_bank = true;
+            } else if (flag == "--threads") {
+                config.worker_threads = static_cast<std::size_t>(
+                    parse_u64(require_value(args, index, flag), "--threads"));
+                if (config.worker_threads == 0) {
+                    throw std::invalid_argument("--threads must be at least 1");
+                }
             } else if (flag == "--relative-indexing") {
                 indexing = nn::IndexingMode::relative;
             } else if (flag == "--distill") {
@@ -193,7 +204,7 @@ int main(int argc, char* argv[]) {
     try {
         nn::NTupleNetwork network(nn::named_tuple_specs(tuples),
                                   static_cast<std::size_t>(stages), global_features, indexing,
-                                  stage_split, structural_features);
+                                  stage_split, structural_features, relative_bank);
         if (!resume.empty()) {
             if (promote_stages && stages > 1) {
                 // Resume a SINGLE-stage file into a multi-stage network, then
@@ -272,6 +283,14 @@ int main(int argc, char* argv[]) {
         }
         if (network.indexing() == nn::IndexingMode::relative) {
             std::cout << "  indexing: RELATIVE to board max (tile downgrading)\n";
+        }
+        if (network.has_relative_bank()) {
+            std::cout << "  relative bank: on (rank-relative tuple tables, base 9)\n";
+        }
+        if (config.worker_threads > 1) {
+            std::cout << "  " << config.worker_threads
+                      << " worker threads (Hogwild): games are the same, update ORDER is not,\n"
+                      << "  so this run is NOT bit-reproducible. Use --threads 1 if it must be.\n";
         }
         if (network.has_structural_features()) {
             std::cout << "  structural features: on (snake order, cornered, empties)\n";

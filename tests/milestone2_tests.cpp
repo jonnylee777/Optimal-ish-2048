@@ -1,10 +1,13 @@
 #include "agents/greedy_agent.hpp"
 #include "agents/random_agent.hpp"
+#include "agents/search_agent.hpp"
 #include "core/board.hpp"
+#include "evaluation/h0_heuristic.hpp"
 #include "experiments/game_runner.hpp"
 #include "game/game.hpp"
 
 #include <array>
+#include <memory>
 #include <cstdint>
 #include <exception>
 #include <iostream>
@@ -182,6 +185,81 @@ void test_greedy_experiment_and_invalid_config() {
     CHECK(rejected);
 }
 
+// GATE: the multi-threaded runner must reproduce the serial runner's scores
+// exactly. Sample size is the binding constraint on every keep/reject decision
+// in this project, and threads are how it is bought -- so "parallel plays the
+// same games" is load-bearing, not a nicety.
+//
+// Uses a SearchAgent rather than a stateless one on purpose: a SearchAgent
+// carries a transposition table across games, and the reason assignment cannot
+// matter is that entries are stamped with a never-reused generation. A greedy
+// agent would pass this test while proving nothing about that.
+void test_parallel_runner_matches_serial() {
+    const a2048::H0Heuristic evaluator{};
+    const a2048::RunConfig config{12, 4'242};
+
+    a2048::SearchAgent serial_agent(evaluator, 2, "expectimax");
+    const auto serial = a2048::GameRunner::run(serial_agent, config);
+    CHECK(serial.worker_count == 1);
+
+    for (const std::size_t workers : {2U, 3U, 5U}) {
+        std::vector<std::unique_ptr<a2048::SearchAgent>> agents;
+        std::vector<a2048::Agent*> pointers;
+        for (std::size_t index = 0; index < workers; ++index) {
+            agents.push_back(
+                std::make_unique<a2048::SearchAgent>(evaluator, 2, "expectimax"));
+            pointers.push_back(agents.back().get());
+        }
+        const auto parallel = a2048::GameRunner::run(pointers, config);
+
+        CHECK(parallel.worker_count == std::min(workers, config.game_count));
+        CHECK(parallel.games.size() == serial.games.size());
+        for (std::size_t index = 0; index < serial.games.size(); ++index) {
+            // Seed order, not completion order: results are indexed by game.
+            CHECK(parallel.games[index].seed == serial.games[index].seed);
+            CHECK(parallel.games[index].score == serial.games[index].score);
+            CHECK(parallel.games[index].moves == serial.games[index].moves);
+            CHECK(parallel.games[index].max_tile_exponent ==
+                  serial.games[index].max_tile_exponent);
+        }
+        CHECK(parallel.mean_score() == serial.mean_score());
+
+        // Statistics merged across workers must account for every move played,
+        // or a parallel run would silently under-report its own search cost.
+        std::uint64_t merged_moves = 0;
+        for (const auto& agent : agents) {
+            const auto& usage = agent->completed_depth_usage();
+            for (const auto count : usage) {
+                merged_moves += count;
+            }
+        }
+        std::uint64_t played_moves = 0;
+        for (const auto& game : parallel.games) {
+            played_moves += game.moves;
+        }
+        CHECK(merged_moves == played_moves);
+    }
+
+    // More workers than games must not deadlock, spin, or lose a game.
+    std::vector<std::unique_ptr<a2048::SearchAgent>> many;
+    std::vector<a2048::Agent*> many_pointers;
+    for (std::size_t index = 0; index < 4; ++index) {
+        many.push_back(std::make_unique<a2048::SearchAgent>(evaluator, 1, "expectimax"));
+        many_pointers.push_back(many.back().get());
+    }
+    const auto tiny = a2048::GameRunner::run(many_pointers, a2048::RunConfig{2, 99});
+    CHECK(tiny.games.size() == 2);
+    CHECK(tiny.worker_count == 2);
+
+    bool empty_rejected = false;
+    try {
+        static_cast<void>(a2048::GameRunner::run(std::vector<a2048::Agent*>{}, config));
+    } catch (const std::invalid_argument&) {
+        empty_rejected = true;
+    }
+    CHECK(empty_rejected);
+}
+
 }  // namespace
 
 int main() {
@@ -194,6 +272,7 @@ int main() {
         {"greedy agent", test_greedy_agent_policy},
         {"experiment reproducibility", test_experiment_reproducibility},
         {"greedy experiment", test_greedy_experiment_and_invalid_config},
+        {"GATE: parallel runner reproduces serial scores", test_parallel_runner_matches_serial},
     };
 
     std::size_t failures = 0;

@@ -45,6 +45,15 @@ public:
     [[nodiscard]] const SearchStatistics& cumulative_statistics() const noexcept;
     void clear_statistics() noexcept;
 
+    // Adds another agent's accumulated counters to this one's. Exists so a
+    // multi-threaded run, which needs one agent per thread, can still report a
+    // single set of statistics for the experiment as a whole.
+    //
+    // `elapsed_seconds` sums CPU time across workers and so exceeds wall clock
+    // above one thread; that is the honest quantity to add, and the result file
+    // records the worker count alongside it so the two are never confused.
+    void merge_statistics(const SearchAgent& other) noexcept;
+
 private:
     std::string name_;
     std::uint32_t depth_;

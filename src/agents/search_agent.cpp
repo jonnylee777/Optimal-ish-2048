@@ -114,6 +114,22 @@ const SearchStatistics& SearchAgent::cumulative_statistics() const noexcept {
     return cumulative_;
 }
 
+void SearchAgent::merge_statistics(const SearchAgent& other) noexcept {
+    cumulative_.player_nodes += other.cumulative_.player_nodes;
+    cumulative_.chance_nodes += other.cumulative_.chance_nodes;
+    cumulative_.leaf_evaluations += other.cumulative_.leaf_evaluations;
+    cumulative_.spawn_outcomes += other.cumulative_.spawn_outcomes;
+    cumulative_.cache_lookups += other.cumulative_.cache_lookups;
+    cumulative_.cache_hits += other.cumulative_.cache_hits;
+    cumulative_.elapsed_seconds += other.cumulative_.elapsed_seconds;
+    for (std::size_t index = 0; index < adaptive_depth_usage_.size(); ++index) {
+        adaptive_depth_usage_[index] += other.adaptive_depth_usage_[index];
+    }
+    for (std::size_t index = 0; index < completed_depth_usage_.size(); ++index) {
+        completed_depth_usage_[index] += other.completed_depth_usage_[index];
+    }
+}
+
 void SearchAgent::clear_statistics() noexcept {
     cumulative_ = {};
     adaptive_depth_usage_ = {};

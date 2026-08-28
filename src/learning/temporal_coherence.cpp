@@ -1,5 +1,7 @@
 #include "learning/temporal_coherence.hpp"
 
+#include "learning/relaxed_atomic.hpp"
+
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -16,10 +18,27 @@ TemporalCoherenceLearner::TemporalCoherenceLearner(const NTupleNetwork& network)
     scratch_.reserve(network.active_weight_count());
 }
 
-double TemporalCoherenceLearner::update(
-    NTupleNetwork& network, Board afterstate, double target, double alpha) {
-    network.active_indices(afterstate, scratch_);
-    if (scratch_.empty()) {
+template <bool Concurrent>
+double TemporalCoherenceLearner::update_impl(
+    NTupleNetwork& network, Board afterstate, double target, double alpha,
+    std::vector<std::size_t>& scratch) {
+    const auto read = [](const float& slot) noexcept {
+        if constexpr (Concurrent) {
+            return load_relaxed(slot);
+        } else {
+            return slot;
+        }
+    };
+    const auto add = [](float& slot, float amount) noexcept {
+        if constexpr (Concurrent) {
+            add_relaxed(slot, amount);
+        } else {
+            slot += amount;
+        }
+    };
+
+    network.active_indices(afterstate, scratch);
+    if (scratch.empty()) {
         return 0.0;
     }
 
@@ -30,38 +49,52 @@ double TemporalCoherenceLearner::update(
     // tuple, ordering by ordering -- so this is bit-identical to calling it,
     // not merely close.
     double current = 0.0;
-    for (const auto index : scratch_) {
-        current += static_cast<double>(weights[index]);
+    for (const auto index : scratch) {
+        current += static_cast<double>(read(weights[index]));
     }
     const auto delta = target - current;
 
     // Same 1/m scaling as plain TD, so `alpha` keeps its usual meaning and a
     // TC run is directly comparable to a plain run at the same alpha.
-    const auto step = alpha * delta / static_cast<double>(scratch_.size());
+    const auto step = alpha * delta / static_cast<double>(scratch.size());
     const auto magnitude = static_cast<float>(std::abs(delta));
     const auto signed_delta = static_cast<float>(delta);
 
     double beta_total = 0.0;
-    for (const auto index : scratch_) {
-        const auto absolute = absolute_error_sum_[index];
+    for (const auto index : scratch) {
+        const auto absolute = read(absolute_error_sum_[index]);
         // A weight with no history has no evidence of oscillation yet, so it
         // gets a full step -- this makes TC reduce exactly to plain TD on the
         // first visit to any weight.
         const auto beta = absolute > 0.0F
-            ? static_cast<double>(std::abs(error_sum_[index])) / static_cast<double>(absolute)
+            ? static_cast<double>(std::abs(read(error_sum_[index]))) /
+                  static_cast<double>(absolute)
             : 1.0;
 
-        weights[index] += static_cast<float>(beta * step);
+        add(weights[index], static_cast<float>(beta * step));
 
         // Accumulate AFTER stepping, so beta reflects history strictly before
         // this update. Note an index can repeat within one board when two
         // symmetric orderings collide; treating each occurrence as its own
         // update is what keeps this consistent with NTupleNetwork::update.
-        error_sum_[index] += signed_delta;
-        absolute_error_sum_[index] += magnitude;
+        add(error_sum_[index], signed_delta);
+        add(absolute_error_sum_[index], magnitude);
         beta_total += beta;
     }
-    return beta_total / static_cast<double>(scratch_.size());
+    return beta_total / static_cast<double>(scratch.size());
+}
+
+double TemporalCoherenceLearner::update(
+    NTupleNetwork& network, Board afterstate, double target, double alpha) {
+    return update(network, afterstate, target, alpha, scratch_);
+}
+
+double TemporalCoherenceLearner::update(
+    NTupleNetwork& network, Board afterstate, double target, double alpha,
+    std::vector<std::size_t>& scratch) {
+    return concurrent_
+        ? update_impl<true>(network, afterstate, target, alpha, scratch)
+        : update_impl<false>(network, afterstate, target, alpha, scratch);
 }
 
 double TemporalCoherenceLearner::mean_beta() const {
