@@ -117,6 +117,7 @@ below are not ceremony.
 | `RESULTS.md` | every agent version, training recipe, and score |
 | `docs/DESIGN.md` | architecture, components, control flows, design decisions |
 | `docs/ROADMAP.md` | current state, next steps, open questions |
+| `docs/32768-investigation.md` | **the 32768 ceiling: every hypothesis, test and outcome** |
 | `docs/EXPERIMENTS.md` | experiment index with methodology and conclusions |
 | `docs/experiment-log.md` | full chronological log, including retractions |
 | `docs/engine-optimization-notes.md` | benchmarking discipline — read before timing anything |

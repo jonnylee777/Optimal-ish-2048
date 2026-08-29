@@ -30,6 +30,7 @@ the ceiling phase 3 hit.
 | [CLAUDE.md](CLAUDE.md) | conventions and invariants — start here before editing |
 | [docs/DESIGN.md](docs/DESIGN.md) | architecture, components, control flows |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | current state, next steps, open questions |
+| [docs/32768-investigation.md](docs/32768-investigation.md) | the 32768 ceiling: every hypothesis, test and outcome |
 | [docs/EXPERIMENTS.md](docs/EXPERIMENTS.md) | what was tried, how, and what it showed |
 | [docs/experiment-log.md](docs/experiment-log.md) | full chronological log, including retractions |
 

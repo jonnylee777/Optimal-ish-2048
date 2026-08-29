@@ -309,6 +309,7 @@ at one-move-ahead play, the latter needing configurations around 15 GB. At
 | Path | Contents |
 |---|---|
 | `RESULTS.md` | this file |
+| `docs/32768-investigation.md` | the 32768 ceiling: every hypothesis, test and outcome |
 | `docs/experiment-log.md` | full chronological log, including retracted conclusions |
 | `docs/phase1-heuristics.md` | hand-written rules, search semantics |
 | `docs/phase2-endgame-tablebase.md` | solver design, why it was dropped |

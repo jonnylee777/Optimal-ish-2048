@@ -5,6 +5,10 @@ measurement in this repository; **speculative** items are not.
 
 ## Current state
 
+**The 32768 ceiling has its own consolidated write-up:**
+[`docs/32768-investigation.md`](32768-investigation.md) — every hypothesis raised
+against it, how each was tested, and which four were refuted.
+
 **Best agent: 345,380** — `n12_plain_2M.bin` at depth 4, n=200. Reaches 16384 in
 93% of games, 32768 in 4.5%. The previously published 356,178 was n=60 and is
 3.3% optimistic; the same weights score 344,399 over 200 games.

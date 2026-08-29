@@ -93,6 +93,15 @@ target_compile_definitions(optimize_structural PRIVATE
 )
 adversarial_2048_enable_warnings(optimize_structural)
 
+# Measures P(second 16384 | 16384 + 8192) directly, instead of inferring it from
+# whole games. See tools/convert_probe.cpp and E33/E34 in docs/experiment-log.md.
+# Committed rather than left in a scratch directory: the previous endgame
+# autopsy lived in scratchpad/, was lost, and its findings could not be
+# reproduced (see "Not determinable from the repository" in docs/EXPERIMENTS.md).
+add_executable(convert_probe tools/convert_probe.cpp)
+target_link_libraries(convert_probe PRIVATE adversarial_2048_runtime)
+adversarial_2048_enable_warnings(convert_probe)
+
 include(CTest)
 
 if(BUILD_TESTING)

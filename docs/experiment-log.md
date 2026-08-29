@@ -1642,6 +1642,123 @@ says that instead.
 
 ---
 
+## E34 — Endgame seeding, measured on the metric it was built for  ⭐ FIRST POSITIVE
+
+E28 rejected endgame-seeded training. E29 confirmed it is genuinely worse at
+1 ply (−1.8%, p=0.001, n=10,000 against its matched control). Both judged it on
+**mean score at depth 1**, where P(32768) is ~1/10,000 for every network ever
+trained here — a metric structurally incapable of detecting what the
+intervention changes. E28's own text says the primary metric was
+`achievement_rate_32768` at depth 4. That was never measured.
+
+Measured now, on 224 matched junctures at depth 4 / cutoff 0.0015, networks
+being the only thing that varies:
+
+| Network | Converts | Rate | vs baseline |
+|---|---:|---:|---:|
+| `n17_structural` (whole-board features) | 12/224 | 5.36% | p=0.83 |
+| `n12_plain_2M` (2M games) — baseline | 11/224 | 4.91% | — |
+| **`n15_seeded`** | **10/224** | **4.46%** | — |
+| `n5_large_1M` (1M games) | 6/224 | 2.68% | p=0.22 |
+| `n19_distill` | 6/224 | 2.68% | p=0.22 |
+| **`n9_ext_1M1`** — seeded's matched control | **3/224** | **1.34%** | — |
+
+**Seeded vs its own matched control: 4.46% against 1.34%, a 3.3x lift,
+p≈0.048.** Same resume, same seed, same alpha, same 100k extra games; seeding is
+the only difference. The comparison was named before the run, not chosen after.
+
+### Why this is not yet a result
+
+`n9_ext_1M1` at 1.34% converts *worse* than the weaker network it was built from
+(`n5_large_1M`, 2.68%) despite beating it decisively on ordinary play. That gap
+is noise (p=0.31), and it shows how much three-versus-six events wobble. If the
+control's true rate is nearer 2.7%, seeding's lift falls to ~1.6x and stops
+being significant. The finding rests on 3 events against 10.
+
+Required sample to settle it, at 80% power:
+
+| If the control's true rate is | to resolve 2x | to resolve 1.5x |
+|---|---:|---:|
+| 1.34% | n~1,720/arm | n~5,750/arm |
+| 2.70% | n~840/arm | n~2,810/arm |
+
+**Do not act on this until it is re-run at n>=1,000 per arm.** Probing is cheap
+(224 trials in ~3 minutes); only collecting junctures costs anything (~1.4 h per
+900).
+
+### Also measured, also null
+
+Arrival state does **not** predict conversion. Boards that converted and boards
+that failed are indistinguishable on arrival: free cells 6.55 vs 6.14, unbroken
+ladder run 1.18 vs 1.04, cornered 0.82 vs 0.65, distinct tiles 5.91 vs 5.73. So
+the conversion is not lost before the agent gets there. (The ladder-run feature
+counts from one fixed corner and reads ~1 on almost every board, so it did not
+get a fair test.)
+
+---
+
+## E33 — Search is not the lever  ❌ TWO INDEPENDENT NULLS
+
+E31 said the failure is precision on a nearly-full board, which is what search
+depth buys. It is not.
+
+**Full games**, adaptive 4/6/8 by empty count vs fixed depth 4, 100 matched
+seeds, same weights, same cutoff:
+
+| | depth 4 | adaptive 4/6/8 |
+|---|---:|---:|
+| Mean score | 345,380 | 364,431 (+3.8%, p=0.19) |
+| **32768 rate** | **4.5%** | **5.0% (p=0.76)** |
+| 16384 rate | 93% | 96% (p n.s.) |
+
+24x the compute, no movement on the endpoint.
+
+**Conversion probe**, 32x more search (depth 6 at cutoff 0.0002 = 523k
+nodes/move against the baseline's 16.5k), 224 matched junctures:
+
+| | converts | rate |
+|---|---:|---:|
+| depth 4, cutoff 0.0015 | 11/224 | 4.91% |
+| depth 6, cutoff 0.0002 | 13/224 | 5.80% |
+
+`p=0.67`; the test could have detected 4.9% -> 10.9%. **Thirty-two times more
+search bought two extra conversions out of 224.**
+
+The deeper agent does play better — it survives 10% longer from the juncture
+(3,147 vs 2,862 tail moves) and scores ~4% more overall. It simply loses the
+same way, more slowly.
+
+### What that implies
+
+Search can only choose among options the evaluator can distinguish. Better
+survival with identical conversion is the signature of an evaluator that cannot
+tell the deciding positions apart — so more lookahead explores more branches it
+also cannot judge. The constraint is the value function, not the search.
+
+Whole-board features do not fix it either (`n17_structural`, +0.45pp, p=0.83),
+which retires the "the evaluator cannot see the whole ladder" explanation: it
+*can* be given that information and it does not help.
+
+### The instrument
+
+`tools/convert_probe.cpp`. E31 localised the failure to one conditional —
+P(second 16384 | 16384 + 8192 on the board) — and whole-game benchmarking is a
+poor way to measure it: a depth-8 game runs ~20,000 moves and only the last
+~2,800 test the conditional. The probe collects junctures once from a cheap
+depth-4 run, then replays only the tail under each config, with the spawn stream
+derived from the juncture's own seed so arms get **matched** trials.
+
+Baseline validation: 11/224 = 4.91%, against 4/127 = 3.1% for the same quantity
+measured from whole games in E31. Cost per arm at baseline settings: ~3 minutes.
+
+**Cost scales with nodes per move, not with the depth number.** Measured, per
+move: depth 4 / 0.0015 = 16.5k nodes; depth 6 / 0.0015 = 103k; depth 6 / 0.0002
+= 523k. The first probe run at that last setting was sized by eye and took
+**15 hours**, printing nothing until it finished. The tool now reports progress
+every 10 trials and carries this table in its header.
+
+---
+
 ## E32 — The probability cutoff, not the depth setting, is the real depth knob
 
 Derived while sizing E33, and it changes what "depth 8" means here.
