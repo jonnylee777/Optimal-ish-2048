@@ -114,6 +114,24 @@ All measured at search depth four, so the comparison is fair:
 **Full version-by-version record, with parameters and runtimes:
 [`experiment_results.md`](experiment_results.md).**
 
+### Watching it play
+
+`watch_agent` renders a live game in the terminal with the agent's score, move
+count, largest tile and per-move search time. Any trained network or hand-written
+evaluator can be loaded, so two versions can be compared side by side in two
+terminals.
+
+```sh
+./build-release/watch_agent --list                # what networks are available
+./build-release/watch_agent                       # watch the best agent
+./build-release/watch_agent --from-tile 16384     # sprint to the interesting part
+```
+
+A full game at depth four runs about 15,000 moves, so `--from-tile` plays at full
+speed until the board reaches the tile you name and only then slows to a
+watchable rate — otherwise the first several thousand moves are a formality you
+have to sit through. `--step` advances one move per keypress.
+
 ---
 
 ## Key findings
@@ -187,6 +205,14 @@ ctest --test-dir build-release
   --search fixed --depth 4 --probability-cutoff 0.0015 \
   --seeds 30000-30199 --threads 8
 
+# Watch an agent play, live in the terminal
+./build-release/watch_agent --list                    # available networks
+./build-release/watch_agent                           # best agent, default game
+./build-release/watch_agent --weights experiments/weights/n12_plain_2M.bin
+./build-release/watch_agent --heuristic H5 --delay-ms 40
+./build-release/watch_agent --from-tile 16384 --delay-ms 150   # skip to the endgame
+./build-release/watch_agent --step                    # one move per keypress
+
 # Compare two runs, with a power report
 python3 tools/compare_runs.py BASELINE.csv CANDIDATE.csv
 python3 tools/compare_runs.py --metric tile:32768 BASELINE.csv CANDIDATE.csv
@@ -213,7 +239,7 @@ size; `experiment_results.md` records the recipe for every one.
 | `src/learning/` | Pattern-table network, temporal difference trainer, temporal coherence |
 | `src/tablebase/` | Exact endgame solver from phase two |
 | `src/experiments/` | Benchmark harness, result recording |
-| `tools/` | Analysis scripts and the conversion probe |
+| `tools/` | Analysis scripts, the conversion probe, and the live viewer |
 | `tests/` | 19 standalone suites; those prefixed `GATE:` are load-bearing |
 | `experiments/results/` | Every benchmark run, as CSV and JSON with full provenance |
 | `experiments/weights/` | Trained networks (excluded from version control) |

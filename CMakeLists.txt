@@ -102,6 +102,13 @@ add_executable(convert_probe tools/convert_probe.cpp)
 target_link_libraries(convert_probe PRIVATE adversarial_2048_runtime)
 adversarial_2048_enable_warnings(convert_probe)
 
+# Watch an agent play live in the terminal. Every other entry point reduces a
+# game to a row in a CSV, which is right for measurement and useless for seeing
+# what the agent actually does with a board.
+add_executable(watch_agent tools/watch_agent.cpp)
+target_link_libraries(watch_agent PRIVATE adversarial_2048_runtime)
+adversarial_2048_enable_warnings(watch_agent)
+
 include(CTest)
 
 if(BUILD_TESTING)
