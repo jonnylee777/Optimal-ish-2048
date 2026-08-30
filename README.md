@@ -24,10 +24,9 @@ agents of this kind reach comparable scores using configurations that need aroun
 
 ---
 
-## Data
+## Training Data
 
-There is no external dataset. The agent generates its own training data by
-playing itself.
+The agent generates its own training data by playing games by itself.
 
 | | |
 |---|---|
