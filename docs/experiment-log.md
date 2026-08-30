@@ -1642,7 +1642,51 @@ says that instead.
 
 ---
 
-## E34 — Endgame seeding, measured on the metric it was built for  ⭐ FIRST POSITIVE
+## E35 — The seeding result was a FALSE POSITIVE  ❌ E34 RETRACTED
+
+E34 reported endgame seeding converting 3.3x its matched control (4.46% vs
+1.34%, p=0.048) on 224 junctures, and flagged that it rested on 3 events against
+10. Re-run on **1,256** junctures, same matched design:
+
+| Network | n=224 | **n=1,256** |
+|---|---:|---:|
+| `n15_seeded` | 10/224 = 4.46% | **42/1256 = 3.34%** |
+| `n9_ext_1M1` (control) | 3/224 = 1.34% | **46/1256 = 3.66%** |
+| `n12_plain_2M` (baseline) | 11/224 = 4.91% | 64/1256 = 5.10% |
+
+**Seeding vs control: 3.34% against 3.66%, p=0.67. No effect**, marginally
+negative. The entire 3.3x was the control drawing 3/224 when its true rate is
+3.66% — exactly the failure mode E34 named in advance.
+
+E34's conclusion is **retracted**. Endgame seeding does not raise the conversion
+rate. E28/E29 rejected it for the wrong reason (a metric that could not see it);
+it is now rejected for the right one.
+
+**The rule.** p=0.048 on 3-versus-10 events is not a result, it is a lottery
+ticket. Had this been acted on rather than confirmed, it would have bought a
+30-hour training run on nothing. Confirm before committing the machine.
+
+### The instrument checks out
+
+Baseline conversion 5.10% x 78.5% of games reaching the juncture = **4.0%**
+predicted 32768 rate, against **4.5%** measured independently from whole games
+at n=200. The probe measures what it claims to.
+
+### What still stands
+
+| Network | Training | Conversion (n=1,256) |
+|---|---:|---:|
+| `n9_ext_1M1` | 1.1M games | 3.66% |
+| `n12_plain_2M` | 2.0M games | 5.10% |
+
++1.44pp, **p=0.078**. Not significant, but the third independent measurement
+pointing the same way, and unlike seeding it has *strengthened* with each larger
+sample (depth-1 score +5.2% at p<0.001; conversion p=0.22 at n=224; p=0.078 at
+n=1,256).
+
+---
+
+## E34 — Endgame seeding, measured on the metric it was built for  ⚠️ SUPERSEDED BY E35
 
 E28 rejected endgame-seeded training. E29 confirmed it is genuinely worse at
 1 ply (−1.8%, p=0.001, n=10,000 against its matched control). Both judged it on
@@ -1683,8 +1727,14 @@ Required sample to settle it, at 80% power:
 | 2.70% | n~840/arm | n~2,810/arm |
 
 **Do not act on this until it is re-run at n>=1,000 per arm.** Probing is cheap
-(224 trials in ~3 minutes); only collecting junctures costs anything (~1.4 h per
-900).
+(224 trials in ~3 minutes); only collecting junctures costs anything.
+
+**It was re-run at n=1,256 and did not survive — see E35.** The caveat above was
+the correct call; the finding was not.
+
+*(Collection cost was also badly mis-estimated here: it is ~93 core-seconds per
+GAME PLAYED, not per juncture found, and 8 workers on this M1 is a measured
+3.43x rather than 8x. 1,600 games took 12 hours, not the 2.2 h predicted.)*
 
 ### Also measured, also null
 

@@ -192,12 +192,28 @@ int collect(const a2048::Evaluator& evaluator, char** argv) {
     std::vector<Juncture> junctures;
     std::mutex mutex;
     std::atomic<std::size_t> next{0};
+    std::atomic<std::size_t> played{0};
     const auto worker = [&] {
         a2048::SearchAgent agent(evaluator, 4, "expectimax", make_options(0.0015));
         while (true) {
             const auto index = next.fetch_add(1);
             if (index >= games) {
                 return;
+            }
+            // Progress, and a periodic checkpoint. The first long collection ran
+            // 12 hours writing nothing until the end, so there was no way to
+            // tell progress from a hang and a kill would have forfeited all of
+            // it. Cost scales with GAMES PLAYED, not junctures found: every game
+            // runs to completion whether or not it reaches the juncture, at
+            // ~93 core-seconds each, and 8 workers on this M1 is a measured
+            // 3.43x -- not 8x. Size accordingly.
+            const auto done = played.fetch_add(1) + 1;
+            if (done % 50 == 0) {
+                const std::lock_guard<std::mutex> guard(mutex);
+                save_junctures(out, junctures);
+                std::fprintf(stderr, "  %zu/%zu games, %zu junctures (checkpointed)\n",
+                             done, games, junctures.size());
+                std::fflush(stderr);
             }
             a2048::Game game(first_seed + index);
             bool captured = false;
