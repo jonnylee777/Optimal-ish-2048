@@ -24,4 +24,4 @@ Nothing below n=200 should drive a decision — use `tools/compare_runs.py`.
 any depth, and depth changes the answer a great deal (226,324 at depth 1 versus
 356,178 at depth 4 for the same file). Always compare at matched depth.
 
-Full results and training recipes: [../../../RESULTS.md](../../../RESULTS.md).
+Full results and training recipes: [../../../experiment_results.md](../../../experiment_results.md).

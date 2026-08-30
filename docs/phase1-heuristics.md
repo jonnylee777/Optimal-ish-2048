@@ -41,7 +41,7 @@ did not.
 **H4 is not "H3 + one feature."** Unlike H1→H2→H3, which each add a feature
 to the previous, H4 is a faithful port of the reference
 [nneonneo/2048-ai](https://github.com/nneonneo/2048-ai) heuristic (MIT
-licensed; described in [`../reference.md`](../reference.md)), with its own
+licensed; described in [`DESIGN.md`](DESIGN.md)), with its own
 independent feature set and its published CMA-ES-optimized weights
 (empty 270, merges 700, monotonicity 47, sum 11). It takes the H4 slot
 simply as the next number. Worth knowing when reading comparisons: H4's
@@ -66,7 +66,7 @@ have written H2 off.
 
 H0 is deliberately the simplest heuristic in the codebase, one rung below
 H1: it's modeled on the *original* nneonneo heuristic described in
-[`../reference.md`](../reference.md) — "bonuses for open squares and for
+[`DESIGN.md`](DESIGN.md) — "bonuses for open squares and for
 having large values on the edge" — before monotonicity/smoothness were
 added. It exists to give every benchmark matrix a genuine floor.
 

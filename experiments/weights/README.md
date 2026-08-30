@@ -1,7 +1,7 @@
 # Trained networks
 
 Excluded from git (hundreds of MB each). Everything needed to regenerate them is
-committed — see `RESULTS.md` for each version's training recipe.
+committed — see `../../experiment_results.md` for each version's training recipe.
 
 ## What to keep
 
@@ -27,5 +27,5 @@ warning when that happens.
 
 `<name>.at<N>.bin` are snapshots every N games. Useful while a run is live (to
 measure progress without waiting) and for the depth-vs-training curves in
-`RESULTS.md`. Safe to delete once the final weights exist and the run has been
+`../../experiment_results.md`. Safe to delete once the final weights exist and the run has been
 benchmarked.

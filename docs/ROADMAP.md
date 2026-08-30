@@ -100,7 +100,7 @@ Status at time of writing: learns (3,450 untrained -> ~42,000), but was
 
 ## Rejected — do not repeat without new information
 
-Each was measured, not assumed. Details in `EXPERIMENTS.md`.
+Each was measured, not assumed. Details in `../experiment_results.md`.
 
 | Idea | Result |
 |---|---|

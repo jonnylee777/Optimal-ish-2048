@@ -22,4 +22,4 @@ at 5.0 ms/move, against H3's 57,318 at 71.8 ms/move.
 established. Only H5-vs-H3 was rerun at n=40 (+90.5%, p=1e-10). Any table
 quoting the others must carry that caveat.
 
-Scores: [../../../RESULTS.md](../../../RESULTS.md).
+Scores: [../../../experiment_results.md](../../../experiment_results.md).

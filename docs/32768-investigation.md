@@ -7,9 +7,14 @@ hypothesis raised against it, how each was tested, and what survived.
 work). This file is the consolidated view — read it first, then the log entries
 for detail.
 
-**Status: the cliff is not cleared.** Five hypotheses tested, four refuted, one
-promising but underpowered. The measurement apparatus is now good enough that
-further work is worth doing, which was not true when this started.
+**Status: the cliff is dented, not cleared.** Six hypotheses tested, six refuted.
+The one lever that does move it — training volume — turned out to peak at 2.5
+million games and then reverse, and selecting that peak produced the current best
+agent: **362,341 mean over 400 games, reaching 32768 in 7.0%**, against 348,960
+and 4.0% for the previous best.
+
+See [`../experiment_results.md`](../experiment_results.md) for the published
+version-by-version record; this file is the deep dive on the barrier itself.
 
 ---
 
@@ -47,7 +52,7 @@ the same `n5_large_1M` weights score 344,399 over 200 games.
 
 ## 2. Where the failure actually is
 
-**This overturned the project's central diagnosis.** RESULTS.md and E26 held
+**This overturned the project's central diagnosis.** The published results page and E26 both held
 that the agent reaches 16384 and then cannot rebuild beneath it — "a roughly
 100-move task, beyond any search horizon, so it must come from the value
 function." That framing is why deeper search was deprioritised and the endgame
