@@ -77,6 +77,11 @@ best-looking board. Nothing is learned; all knowledge is in the formula.
 then every possible random tile the game could drop, weighted by probability,
 then its own move again. Depth counts only the agent's own decision layers.
 
+All ran an **exact search with no pruning**, unlike the learned networks in
+phase three, which prune branches below a probability threshold. The two groups
+are therefore not directly interchangeable even at the same depth; the
+hand-written agents received more search per move.
+
 | Version | What the formula looks at | Mean score | Games | Time per move | Time per game | Reaches 16,384 |
 |---|---|---:|---:|---:|---:|---:|
 | H0 | empty squares, largest tile near an edge | 26,769 | 10 | 6.3 ms | 9.0 s | 0% |
@@ -175,18 +180,27 @@ The same saved network, nothing retrained, played at increasing depth:
   <img src="docs/figures/search-depth.png" alt="Mean score against search depth for one fixed network" width="70%">
 </picture>
 
-| Moves searched ahead | Mean score | Games | Time per move | Time per game | Reaches 16,384 | Reaches 32,768 |
-|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 226,325 | 200 | 0.001 ms | 0.01 s | 54% | 0% |
-| 2 | 306,417 | 200 | 0.035 ms | 0.4 s | 86% | 0% |
-| 3 | 334,030 | 200 | 0.862 ms | 10.9 s | 94% | 2% |
-| 4 | 344,399 | 200 | 3.5 ms | 46.9 s | 95% | 2% |
+| Moves searched ahead | Search pruning | Mean score | Games | Time per move | Time per game | Reaches 16,384 | Reaches 32,768 |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | none | 226,325 | 200 | 0.001 ms | 0.01 s | 54% | 0% |
+| 2 | none | 306,417 | 200 | 0.035 ms | 0.4 s | 86% | 0% |
+| 3 | none | 334,030 | 200 | 0.862 ms | 10.9 s | 94% | 2% |
+| 4 | **0.0015** | 344,399 | 200 | 3.5 ms | 46.9 s | 95% | 2% |
+
+**Depths one to three are a clean comparison; depth four is not.** The
+depth-four run switches on search pruning, so it varies two things at once —
+which is precisely the error that forced this project to retract its earlier
+depth conclusions (E3, E23 in the log). Pruning can only *reduce* the search, so
+an unpruned depth-four run would score at least 344,399, and the direction of the
+finding is safe. Its exact size is not. **No unpruned depth-four measurement
+exists**; it was started and never completed.
 
 The current best agent, being stronger, plays longer games: 2.7 ms per move,
 40 seconds per game, 15,072 moves per game, all measured single-threaded.
 
-Searching four moves ahead instead of one is worth more than every training
-improvement combined.
+Searching three moves ahead instead of one is worth 48 percent — more than every
+training improvement in this project combined — and those two runs differ only in
+depth.
 
 Depth five was measured at 346,739, below depth four — but only over 30 games,
 which resolves nothing at this spread, and the two runs used different pruning

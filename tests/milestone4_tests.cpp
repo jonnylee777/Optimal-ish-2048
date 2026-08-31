@@ -99,6 +99,7 @@ void test_result_files() {
         std::nullopt,
         0.0,
         std::nullopt,
+        std::nullopt,  // deadline_hit_rate
     };
 
     const auto files = a2048::write_experiment_results(

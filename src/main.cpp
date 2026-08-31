@@ -285,6 +285,7 @@ int main(int argc, char* argv[]) {
             std::nullopt,
             time_limit_seconds,
             std::nullopt,
+            std::nullopt,  // deadline_hit_rate: not computed by this legacy CLI
         };
         if (search_agent != nullptr && search_agent->uses_adaptive_depth()) {
             metadata.adaptive_depth_usage = search_agent->adaptive_depth_usage();

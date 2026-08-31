@@ -217,6 +217,13 @@ Options parse(int argc, char** argv) {
         else { std::fprintf(stderr, "error: unrecognized argument '%s'\n", a.c_str()); usage(2); }
     }
     if (o.depth == 0) { std::fputs("error: --depth must be at least 1\n", stderr); std::exit(2); }
+    if (!o.record.empty() && o.games != 1) {
+        // The capture file has no game column, so a multi-game run would record
+        // the first game and silently drop the rest. Refuse rather than write a
+        // file that looks complete and is not.
+        std::fputs("error: --record captures a single game; drop --games\n", stderr);
+        std::exit(2);
+    }
     return o;
 }
 

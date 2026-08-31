@@ -323,8 +323,19 @@ TrainResult train(
 
     // Evaluation and checkpointing both need a quiescent network, so they run
     // between blocks of games rather than inside one.
+    //
+    // Fires on CROSSING a multiple, not on landing exactly on one. The parallel
+    // path advances in blocks, so an interval that is not a multiple of the
+    // block size would otherwise be stepped straight over and never fire at all
+    // -- silently producing a run with no checkpoints. The serial path advances
+    // one game at a time, where crossing and landing coincide, so its behaviour
+    // is unchanged.
+    std::uint64_t evaluations_done = 0;
+    std::uint64_t checkpoints_done = 0;
     const auto report_progress = [&](std::uint64_t games_done) {
-        if (config.evaluate_every != 0 && games_done % config.evaluate_every == 0) {
+        if (config.evaluate_every != 0 &&
+            games_done / config.evaluate_every > evaluations_done) {
+            evaluations_done = games_done / config.evaluate_every;
             long double evaluation_total = 0.0L;
             std::uint64_t best_tile = 0;
             for (std::uint64_t index = 0; index < config.evaluation_games; ++index) {
@@ -361,7 +372,8 @@ TrainResult train(
         }
 
         if (config.checkpoint_every != 0 && on_checkpoint &&
-            games_done % config.checkpoint_every == 0) {
+            games_done / config.checkpoint_every > checkpoints_done) {
+            checkpoints_done = games_done / config.checkpoint_every;
             on_checkpoint(games_done);
         }
     };
