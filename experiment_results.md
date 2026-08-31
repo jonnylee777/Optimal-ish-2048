@@ -25,28 +25,15 @@ milliseconds per move and 40 seconds per game, measured single-threaded.**
 
 ---
 
-## How to read these numbers
+## How to interpret these numbers and notes:
 
-**Every score is an average over many complete games.** A single game of 2048
-ranges from roughly 3,000 to over 600,000 points, so an average over a handful of
-games carries almost no information. The number of games behind each figure is
-always given.
-
-**Search depth is chosen when the agent plays, not when it is trained.** The same
+**Search depth is chosen when the agent plays, not when it is trained:** The same
 saved network scores 226,325 looking one move ahead and 344,399 looking four
 moves ahead. Comparing two versions measured at different depths is meaningless,
 so every table below states the depth and compares only within it.
 
-**Score is almost entirely decided by the largest tile reached.** This is why the
-tile percentages matter as much as the average:
 
-| Largest tile reached | Average score of those games |
-|---|---:|
-| 8,192 | 162,320 |
-| 16,384 | 355,226 |
-| 32,768 | 576,688 |
-
-**How many games are enough.** At search depth four the game-to-game spread is
+**How many games are enough:** At search depth four the game-to-game spread is
 about 85,000 points on a 350,000 average. That means:
 
 | Games measured | Smallest difference the measurement can detect |
@@ -60,20 +47,20 @@ Several conclusions in this project's history were drawn from 60-game runs
 against differences of 2 to 7 percent — differences those runs could not
 possibly have resolved. Those are marked and corrected in the final section.
 
-**Timing figures are single-threaded.** Running games in parallel leaves scores
+**Timing figures are single-threaded:** Running games in parallel leaves scores
 identical but makes per-move timings contended and meaningless, so every runtime
 below comes from a single-threaded run. Machine: Apple M1, eight cores, 8 GB
 memory.
 
 ---
 
-## Phase one — hand-written evaluation functions
+## Phase one — hand-written evaluation functions:
 
-**The approach.** A person writes a formula that scores how good a board looks.
+**The approach:** We wrote a formula that scores individual boards.
 The agent searches several moves ahead and picks the move leading to the
 best-looking board. Nothing is learned; all knowledge is in the formula.
 
-**How the search works.** The agent explores alternating layers: its own move,
+**How the search works:** The agent uses expectimax search: it explores alternating layers: its own move,
 then every possible random tile the game could drop, weighted by probability,
 then its own move again. Depth counts only the agent's own decision layers.
 
@@ -82,81 +69,81 @@ phase three, which prune branches below a probability threshold. The two groups
 are therefore not directly interchangeable even at the same depth; the
 hand-written agents received more search per move.
 
-| Version | What the formula looks at | Mean score | Games | Time per move | Time per game | Reaches 16,384 |
-|---|---|---:|---:|---:|---:|---:|
-| H0 | empty squares, largest tile near an edge | 26,769 | 10 | 6.3 ms | 9.0 s | 0% |
-| H1 | H0 plus tile ordering, similar neighbours, corner preference | 36,142 | 10 | 7.2 ms | 13.2 s | 0% |
-| H2 | H1 plus a chain of tiles around the largest | 34,910 | 10 | 7.6 ms | 13.5 s | 0% |
-| H3 | full snake structure across the whole board | 57,318 | 40 | 71.8 ms | 193.7 s | 0% |
-| H4 | a formula transcribed from another public project | 45,493 | 10 | 4.7 ms | 10.2 s | 0% |
-| **H5** | **the formula that came out of phase two** | **109,213** | **40** | **5.0 ms** | **23.6 s** | **0%** |
+| Version | What the formula looks at | Mean score | Games | Time per move | Time per game | 
+|---|---|---:|---:|---:|---:|
+| H0 | empty squares, largest tile near an edge | 26,769 | 10 | 6.3 ms | 9.0 s | 
+| H1 | H0 plus tile ordering, similar neighbours, corner preference | 36,142 | 10 | 7.2 ms | 13.2 s | 
+| H2 | H1 plus a chain of tiles around the largest | 34,910 | 10 | 7.6 ms | 13.5 s | 
+| H3 | full snake structure across the whole board | 57,318 | 40 | 71.8 ms | 193.7 s | 
+| H4 | a formula transcribed from another public project | 45,493 | 10 | 4.7 ms | 10.2 s | 
+| **H5** | **the formula that came out of phase two** | **109,213** | **40** | **5.0 ms** | **23.6 s** | 
 
 All measured at search depth four.
 
-**What was learned.** H5 was the surprise: it nearly doubles H3 while running
+**What was learned:** H5 was the surprise: it nearly doubles H3 while running
 fourteen times faster per move, and it arrived as a leftover from the endgame
 table work that was otherwise abandoned. It remains the strongest hand-written
 evaluator by a wide margin.
 
-**An honest caveat.** H0 through H4 rest on ten games each, with heavily
+**An honest caveat:** H0 through H4 rest on ten games each, with heavily
 overlapping ranges. Their ordering relative to one another is **not
 established** — only H5 and H3 were re-run at forty games. The published ordering
 of the middle of that table should be treated as noise.
 
 ---
 
-## Phase two — exact endgame tables
+## Phase two — exact endgame tables:
 
-**The approach.** Rather than estimate how good a late-game position is, solve it
+**The approach:** Rather than estimate how good a late-game position is, solve it
 exactly: enumerate every reachable position with a small number of free squares
 and compute the true expected score by working backwards from the end.
 
-**What was built and verified.** A working solver, checked against an independent
+**What was built and verified:** A working solver, checked against an independent
 brute-force implementation, plus a disk-backed version proven to give identical
 answers. Smaller boards (2×4, 3×3, 3×4) were solved perfectly.
 
-**Why it was abandoned — twice, for different reasons.**
+**Why it was abandoned — twice, for different reasons:**
 
-1. **Storage.** The two most useful tables would need 250 GB and 1.1 TB. The
+1. **Storage:** The two most useful tables would need 250 GB and 1.1 TB. The
    machine has about 21 GB free. The tables that did fit covered situations the
    agent was not yet strong enough to reach.
-2. **Relevance.** Once the agent could reach them, this was re-examined. Only
+2. **Relevance:** Once the agent could reach them, this was re-examined. Only
    about 1 percent of late-game moves land in a position those tables cover,
    against a 20 percent threshold set in advance.
 
-**What survived.** The evaluation formula written for the solver became H5, the
+**What survived:** The evaluation formula written for the solver became H5, the
 best hand-written evaluator in the project.
 
 ---
 
-## Phase three — learning from self-play
+## Phase three — learning from self-play:
 
-**The approach.** Replace the hand-written formula with a large lookup table of
+**The approach:** Replace the hand-written formula with a large lookup table of
 tile patterns, and learn the value of every pattern by playing millions of games
 against itself.
 
-**How it works.** Five overlapping windows of six squares each are laid over the
+**How it works:** Five overlapping windows of six squares each are laid over the
 board. Every arrangement of tiles visible through a window has its own stored
 value, and the board's total value is the sum of the five lookups. Each window's
 eight rotations and mirror images share one set of stored values, so every game
 teaches eight equivalent positions at once. The table holds 83.9 million values
 and occupies 320 MB.
 
-**How it learns.** After each move the agent compares what it predicted against
+**How it learns:** After each move the agent compares what it predicted against
 what actually happened one move later, and nudges the stored values toward the
 truth. This is temporal difference learning. Three refinements proved important:
 
-- **Temporal coherence.** Each stored value gets its own learning rate, derived
+- **Temporal coherence:** Each stored value gets its own learning rate, derived
   from whether its past corrections have pointed consistently in one direction
   (keep moving) or cancelled out (settle down).
-- **Backward replay.** A finished game is replayed in reverse when learning, so
+- **Backward replay:** A finished game is replayed in reverse when learning, so
   the knowledge that "the game ended here" travels back along the whole game in
   one pass instead of one position per game.
-- **Scoring the right kind of board.** The network scores the board *after* the
+- **Scoring the right kind of board:** The network scores the board *after* the
   agent's move but *before* the random tile appears. Getting this wrong cost a
   factor of seven in playing strength.
 
-### Version progression, all measured at one move ahead
+### Version progression, all measured at depth one:
 
 Measured at one move ahead so that training changes are compared without search
 masking them. Games per measurement given; the later figures use 10,000 games.
@@ -171,7 +158,7 @@ masking them. Games per measurement given; the later figures use 10,000 games.
 | Twice more training again | 2,000,000 games | 240,366 | 10,000 | 59% |
 | **Current best** | **2,500,000 games** | **244,331** | **10,000** | **61%** |
 
-### The effect of searching deeper
+### The effect of searching deeper:
 
 The same saved network, nothing retrained, played at increasing depth:
 
@@ -198,17 +185,16 @@ exists**; it was started and never completed.
 The current best agent, being stronger, plays longer games: 2.7 ms per move,
 40 seconds per game, 15,072 moves per game, all measured single-threaded.
 
-Searching three moves ahead instead of one is worth 48 percent — more than every
+Searching three moves ahead instead of one results in a 48 percent improvement — more than every
 training improvement in this project combined — and those two runs differ only in
 depth.
 
 Depth five was measured at 346,739, below depth four — but only over 30 games,
 which resolves nothing at this spread, and the two runs used different pruning
 settings. **That comparison is unresolved, not negative.** It is recorded here
-rather than quietly dropped because it is exactly the kind of underpowered result
-this project has mistaken for a conclusion before.
+rather than dropped.
 
-### What moved the number, and what did not
+### What moved the number, and what did not:
 
 | Change | Effect | Evidence |
 |---|---:|---|
@@ -226,7 +212,7 @@ this project has mistaken for a conclusion before.
 | Splitting the table by game stage | **−19.4%** | 300 games |
 | Indexing tiles relative to the largest | **−63%** | 300 games |
 
-**The single most valuable defect fix.** The search asked the network what a
+**The single most valuable defect fix:** The search asked the network what a
 *lost* position was worth instead of using zero. A lost board is full of large
 tiles, and the network overvalues those badly, so it scored dying at roughly
 137,000 points — the agent was being rewarded for losing. On identical weights:
@@ -239,10 +225,9 @@ tiles, and the network overvalues those badly, so it scored dying at roughly
 
 ---
 
-## Phase four — trying to pass the 32768 tile
+## Phase four — trying to pass the 32768 tile:
 
 The agent reached 16,384 in nearly every game and 32,768 in about 3 percent.
-Since score is set by the largest tile, everything now depended on that step.
 
 Eight interventions were tried. **All were measured at 60 games**, which resolves
 only differences larger than about 9 percent, while the effects being tested were
@@ -259,7 +244,7 @@ only differences larger than about 9 percent, while the effects being tested wer
 | Twice the training | 345,858 |
 | Blending multi-step returns | 222,296 |
 
-**The conclusion drawn at the time was wrong.** "Eight attempts all tied" was
+**The conclusion drawn at the time was wrong:** "Eight attempts all tied" was
 read as evidence that deeper search compensates for any weakness in the
 evaluation, so improving the evaluation was pointless. In fact the benchmark
 simply could not see effects that small. Re-measured properly in phase five,
@@ -267,9 +252,9 @@ several of these reverse.
 
 ---
 
-## Phase five — rebuilding the measurement, and the result it produced
+## Phase five — rebuilding the measurement, and the result it produced:
 
-### What was wrong with the measurement
+### What was wrong with the measurement:
 
 **Sample sizes were far too small.** Every phase-four decision rested on 60
 games. Re-running the same comparisons with 10,000 games at one move ahead
@@ -283,19 +268,19 @@ changed several answers, including two sign reversals:
 | Starting from late-game positions | "tie" | −1.8 percent |
 | Doubling the table to 512 MB | "−21 percent" | **−34 percent** (confirmed) |
 
-**Matched game seeds did not help.** The analysis tool claimed that comparing two
+**Matched game seeds did not help:** The analysis tool claimed that comparing two
 agents on identical random seeds "shrinks the error several-fold". The measured
 correlation between two agents on the same seed is essentially zero — they
 diverge within a few moves, so the same seed is not the same game. Sample size is
 the only lever.
 
-**A metric that cannot move cannot judge.** Starting training from late-game
+**A metric that cannot move cannot judge:** Starting training from late-game
 positions was designed to raise the 32,768 rate and was rejected on average score
 at one move ahead — where the 32,768 rate is about one game in ten thousand for
 every network ever trained. The measurement was structurally incapable of
 detecting what the change was for.
 
-### What was built
+### What was built:
 
 | Tool | What it does |
 |---|---|
@@ -304,7 +289,7 @@ detecting what the change was for.
 | Conversion probe | Measures the one decisive quantity directly, described below. |
 | Power reporting | The comparison tool now states the smallest difference a run could detect, and refuses to call an underpowered result a tie. |
 
-### Finding where the agent actually fails
+### Finding where the agent actually fails:
 
 Replaying 160 games and recording how far each got produced a result that
 contradicted the project's standing explanation. The belief was that the agent
@@ -317,7 +302,7 @@ task beyond any search.
 | **Second-largest tile reached 8,192** | **127** | **83.6%** |
 | Completed a second 16,384 | 4 | 2.6% |
 
-**The agent completes the rebuild.** In 84 percent of games it arrives one merge
+**The agent completes the rebuild:** In 84 percent of games it arrives one merge
 away from a second 16,384 and then fails to finish. That is a different problem
 requiring a different fix.
 
@@ -325,7 +310,7 @@ At that moment the board must hold a perfect descending ladder —
 16,384 + 8,192 + 4,096 + … + 2 — filling fourteen of sixteen squares with two
 spare. One duplicate or one gap and it does not fit.
 
-### The conversion probe
+### The conversion probe:
 
 Because the decisive quantity is a single conditional probability — given a board
 holding 16,384 and 8,192, does the agent ever build the second 16,384 — measuring
@@ -338,7 +323,7 @@ trials. This gives roughly five times more measurements of the decisive quantity
 per unit of computer time. Validated against whole games: the probe predicts a
 32,768 rate of 4.0 percent where full games measured 4.5 percent.
 
-### Six explanations tested and refuted
+### Six explanations tested and refuted:
 
 | Explanation | How it was tested | Result |
 |---|---|---|
@@ -354,7 +339,7 @@ The fifth of these initially appeared to work: at 224 positions it showed a
 positions it vanished completely. The apparent effect was its comparison group
 drawing 3 successes out of 224 when its true rate is 3.66 percent.
 
-### The result: training longer makes the endgame worse
+### The result: training longer makes the endgame worse:
 
 Measuring conversion at every training checkpoint revealed that the relationship
 is not what everyone assumed.
@@ -383,7 +368,7 @@ than at two million, while its conversion rate is 20 percent lower. The project
 was on the verge of training to four million games and would have ended up with a
 worse agent while every conventional measurement said it was better.
 
-### The current best agent
+### The current best agent:
 
 Selecting the 2.5-million-game checkpoint and measuring it in full games:
 
@@ -443,7 +428,7 @@ Stated so that nobody infers more from these numbers than they support.
 
 ---
 
-## Where the project stands
+## Where the project stands:
 
 **Solved.** Reaching 16,384 — 96 percent of games.
 
