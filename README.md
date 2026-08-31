@@ -87,13 +87,12 @@ self-play games.
 
 ## Methodology
 
-**Board representation.** Each board is a single 64-bit integer, four bits per
+**Board representation:** Each board is a single 64-bit integer, four bits per
 square holding that tile's exponent — a 2 stored as 1, a 4 as 2, and so on.
 Sliding a row is then a lookup in a precomputed table indexed by that row's 16
 bits, so an entire move costs four table reads rather than any loop over squares.
 
-**Search — expectimax.** 2048 is not adversarial; the opponent is chance. The
-search alternates two kinds of layer: the agent's own move, where it takes the
+**Search — expectimax:**  The search alternates two kinds of layers: the agent's own move, where it takes the
 best option available, and the game's random tile placement, where it takes the
 probability-weighted average over every square the new tile could land in and
 both values it could take. Depth counts only the agent's decision layers.
@@ -105,14 +104,14 @@ the search also abandons any line whose probability of being reached falls below
 a threshold, which is what makes four-move search affordable at a few
 milliseconds per move.
 
-**Baseline — hand-written formulas.** A person writes a formula scoring how good
+**Baseline — hand-written formulas:** A person writes a formula scoring how good
 a board looks, and the search picks the move leading to the best-looking board.
 Six versions were built, scoring properties such as the number of empty squares,
 whether tiles descend in order along a path, whether similar values sit beside
 each other, and whether the largest tile is anchored in a corner. Nothing is
 learned; all the knowledge is in the formula.
 
-**Model — n-tuple board segmentation.** Rather than score the whole board at
+**Model — n-tuple board segmentation:** Rather than score the whole board at
 once, five overlapping windows of six squares each are laid over it. Every
 possible arrangement of tiles visible through a window has its own stored value,
 and the board's value is the sum of the five lookups. This makes the model a
@@ -123,20 +122,20 @@ Each window's eight rotations and reflections share one set of values, so a boar
 and its mirror image are automatically scored the same, and every update teaches
 eight equivalent positions at once.
 
-**Training — temporal-difference learning.** The agent plays against itself.
+**Training — temporal-difference learning:** The agent plays against itself.
 After each move it compares what it predicted a position was worth against what
 it turned out to be worth one move later, and nudges the stored values toward the
 truth. No human game knowledge and no recorded games are used. Three refinements
 mattered:
 
-- **Temporal coherence.** Each stored value gets its own learning rate instead of
+- **Temporal coherence:** Each stored value gets its own learning rate instead of
   sharing one global rate. A value whose past corrections consistently pointed the
   same way is still converging and keeps taking large steps; one whose corrections
   cancel out is oscillating around its answer and gets damped.
-- **Backward replay.** A finished game is replayed in reverse when learning, so
+- **Backward replay:** A finished game is replayed in reverse when learning, so
   the knowledge that "the game ended here" travels back along the entire game in
   a single pass instead of seeping backward one position per game.
-- **Scoring the right board.** The model scores the board *after* the agent's
+- **Scoring the right board:** The model scores the board *after* the agent's
   move but *before* the random tile appears. Scoring the wrong one of those two
   cost a factor of seven in playing strength.
 
@@ -327,8 +326,7 @@ About three hours for 2.5 million games on eight cores:
 
 **What this project does not solve.** The agent reaches 32,768 in 7 percent of
 games and has not breached that cliff reliably. The 65,536 tile — likely the
-highest achievable on a 4×4 board — is out of reach, as it would require a
-near-perfect ladder occupying fifteen of sixteen squares.
+highest achievable on a 4×4 board — is currently out of reach.
 
 **The barrier is not understood.** Six explanations have been tested and refuted:
 skill transfer across tile scales, search depth, search breadth, whole-board
