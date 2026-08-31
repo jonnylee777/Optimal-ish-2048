@@ -9,10 +9,13 @@
 // Any trained network or hand-written evaluator can be loaded, so versions can
 // be watched side by side in two terminals, or in sequence.
 //
-//   watch_agent --weights experiments/weights/n25_best_2M5.bin
-//   watch_agent --heuristic H5 --depth 4 --delay-ms 40
-//   watch_agent --weights <path> --from-tile 8192   # sprint, then slow down
-//   watch_agent --list                              # available networks
+// Run from the repository root -- the default weight path is relative:
+//
+//   ./build-release/watch_agent
+//   ./build-release/watch_agent --seed 30080          # the best recorded game
+//   ./build-release/watch_agent --heuristic H5 --delay-ms 40
+//   ./build-release/watch_agent --from-tile 8192      # sprint, then slow down
+//   ./build-release/watch_agent --list                # available networks
 //
 // The interesting part of a game is its last few hundred moves; the first
 // several thousand are a formality. `--from-tile` plays at full speed until the
@@ -170,7 +173,8 @@ struct Options {
 
 [[noreturn]] void usage(int code) {
     std::fputs(
-        "Watch a 2048 agent play, live.\n\n"
+        "Watch a 2048 agent play, live. Run from the repository root:\n"
+        "  ./build-release/watch_agent [options]\n\n"
         "  --weights PATH        trained network to watch (default: best agent)\n"
         "  --heuristic NAME      N1 (learned) or H0..H5 (hand-written). Default N1\n"
         "  --depth N             moves searched ahead (default 4)\n"
@@ -219,8 +223,10 @@ Options parse(int argc, char** argv) {
 void list_networks() {
     const std::filesystem::path dir = "experiments/weights";
     if (!std::filesystem::exists(dir)) {
-        std::fprintf(stderr, "no %s directory here -- run from the repository root\n",
-                     dir.c_str());
+        std::fprintf(stderr,
+                     "no %s directory here.\n"
+                     "Paths are relative to the repository root, so run:\n"
+                     "  ./build-release/watch_agent --list\n", dir.c_str());
         std::exit(2);
     }
     std::vector<std::pair<std::string, std::uintmax_t>> found;
@@ -254,10 +260,20 @@ int main(int argc, char** argv) {
     try {
         if (options.heuristic == "N1") {
             if (!std::filesystem::exists(options.weights)) {
-                std::fprintf(stderr, "error: no weight file at %s\n"
-                                     "       try --list, or pass --heuristic H5 for a "
-                                     "hand-written evaluator\n",
+                std::fprintf(stderr, "error: no weight file at %s\n",
                              options.weights.c_str());
+                if (!std::filesystem::exists("experiments/weights")) {
+                    // Much the most likely cause: paths here are relative to the
+                    // repository root, and the binary lives in build-release/.
+                    std::fputs("       (no experiments/weights directory here -- run "
+                               "from the repository root:\n"
+                               "        ./build-release/watch_agent ...)\n", stderr);
+                } else {
+                    std::fputs("       try --list to see the available networks, or "
+                               "--heuristic H5\n"
+                               "       for a hand-written evaluator that needs no "
+                               "weight file\n", stderr);
+                }
                 return 2;
             }
             network = std::make_unique<a2048::learning::NTupleNetwork>(

@@ -14,7 +14,7 @@ has to earn its own credibility.
 <p align="center">
   <em>624,164 points · 32,768 tile · 21,960 moves · seed 30080</em><br>
   <sub>Sampled across the full game, slowing down as the 32,768 tile is assembled.
-  Reproduce with <code>watch_agent --seed 30080</code>.</sub>
+  Reproduce with <code>./build-release/watch_agent --seed 30080</code>.</sub>
 </p>
 
 <picture>

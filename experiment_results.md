@@ -14,7 +14,8 @@ milliseconds per move and 40 seconds per game, measured single-threaded.**
 
 <p align="center">
   <img src="docs/figures/best-game.gif" alt="The best agent playing its highest-scoring game" width="300"><br>
-  <em>Its best game: 624,164 points, a 32,768 tile, 21,960 moves (seed 30080).</em>
+  <em>Its best game: 624,164 points, a 32,768 tile, 21,960 moves (seed 30080).<br>
+  Replay it with <code>./build-release/watch_agent --seed 30080</code>.</em>
 </p>
 
 <picture>
