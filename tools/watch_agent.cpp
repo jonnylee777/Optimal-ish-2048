@@ -161,6 +161,11 @@ struct Options {
     bool step = false;
     std::uint64_t from_tile = 0;
     bool list = false;
+    // Dump every board to a file instead of (also) drawing it, so a game can be
+    // turned into an animation offline. Recording implies no delay and no
+    // drawing: a 22,000-move game is not worth watching in real time, and the
+    // point is to capture it exactly, once.
+    std::filesystem::path record;
 };
 
 [[noreturn]] void usage(int code) {
@@ -175,7 +180,8 @@ struct Options {
         "  --delay-ms N          pause between moves; 0 for as fast as it draws\n"
         "  --step                advance one move per Enter keypress\n"
         "  --from-tile N         play at full speed until this tile appears\n"
-        "  --list                list available trained networks\n",
+        "  --list                list available trained networks\n"
+        "  --record PATH         write every board to PATH instead of drawing\n",
         code == 0 ? stdout : stderr);
     std::exit(code);
 }
@@ -202,6 +208,7 @@ Options parse(int argc, char** argv) {
         else if (a == "--step")                o.step = true;
         else if (a == "--from-tile")           o.from_tile = std::stoull(need(argc, argv, i, "--from-tile"));
         else if (a == "--list")                o.list = true;
+        else if (a == "--record")              o.record = need(argc, argv, i, "--record");
         else if (a == "--help" || a == "-h")   usage(0);
         else { std::fprintf(stderr, "error: unrecognized argument '%s'\n", a.c_str()); usage(2); }
     }
@@ -279,6 +286,19 @@ int main(int argc, char** argv) {
         return 2;
     }
 
+    // Recording writes one line per move: move number, score, and the packed
+    // board. Kept as plain text rather than a binary dump so the file can be
+    // read by the rendering script without a shared format definition.
+    std::FILE* record = nullptr;
+    if (!options.record.empty()) {
+        record = std::fopen(options.record.c_str(), "w");
+        if (record == nullptr) {
+            std::fprintf(stderr, "error: cannot write %s\n", options.record.c_str());
+            return 2;
+        }
+        std::fprintf(record, "move,score,packed,high\n");
+    }
+
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     std::atexit(restore_terminal);
@@ -305,6 +325,15 @@ int main(int argc, char** argv) {
             move_ms = std::chrono::duration<double, std::milli>(
                           std::chrono::steady_clock::now() - started).count();
             static_cast<void>(game.apply_move(*direction));
+
+            if (record != nullptr) {
+                std::fprintf(record, "%llu,%llu,%llu,%u\n",
+                             static_cast<unsigned long long>(game.move_count()),
+                             static_cast<unsigned long long>(game.score()),
+                             static_cast<unsigned long long>(game.board().packed_exponents),
+                             static_cast<unsigned>(game.board().exponent_high_bits));
+                continue;  // recording is a capture, not a viewing
+            }
 
             const auto peak = a2048::max_exponent(game.board());
             if (sprinting && peak != 0 && (1ULL << peak) >= options.from_tile) {
@@ -349,6 +378,13 @@ int main(int argc, char** argv) {
         }
 
         const auto peak = a2048::max_exponent(game.board());
+        if (record != nullptr) {
+            std::fclose(record);
+            record = nullptr;
+            std::printf("recorded %llu moves to %s\n",
+                        static_cast<unsigned long long>(game.move_count()),
+                        options.record.c_str());
+        }
         best_score = std::max(best_score, game.score());
         best_tile = std::max(best_tile, peak);
         std::printf("\n  %sgame over%s  score %llu, largest tile %llu, %llu moves\n",

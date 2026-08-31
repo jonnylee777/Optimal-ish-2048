@@ -12,6 +12,11 @@ games, searching four moves ahead. Mean score 362,341 over 400 games; reaches th
 32768 tile in 7.0 percent of games; best single game 624,164. It takes 2.7
 milliseconds per move and 40 seconds per game, measured single-threaded.**
 
+<p align="center">
+  <img src="docs/figures/best-game.gif" alt="The best agent playing its highest-scoring game" width="300"><br>
+  <em>Its best game: 624,164 points, a 32,768 tile, 21,960 moves (seed 30080).</em>
+</p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/figures/progression-dark.png">
   <img src="docs/figures/progression.png" alt="Mean score of every agent version, all measured at search depth four" width="100%">

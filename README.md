@@ -1,11 +1,36 @@
-# A 2048 agent, built by measured iteration
+# Optimal 2048 AI Agent Experimentation
 
-A C++20 research project that builds the strongest 2048-playing agent that fits
-on an 8 GB laptop, by measuring genuinely different approaches against each other
+A C++20 research project that builds the strongest 2048-playing agent viable for a standard 8 GB laptop, by measuring genuinely different approaches against each other
 under one benchmark harness — and by treating every measurement as something that
 has to earn its own credibility.
 
 ---
+
+## Results
+<p align="center">
+  <img src="docs/figures/best-game.gif" alt="The best agent playing its highest-scoring game, reaching a 32768 tile for 624,164 points" width="330">
+</p>
+
+<p align="center">
+  <em>624,164 points · 32,768 tile · 21,960 moves · seed 30080</em><br>
+  <sub>Sampled across the full game, slowing down as the 32,768 tile is assembled.
+  Reproduce with <code>watch_agent --seed 30080</code>.</sub>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/tile-distribution-dark.png">
+  <img src="docs/figures/tile-distribution.png" alt="How often the best agent reaches each tile" width="72%">
+</picture>
+
+| | Result over 400 games |
+|---|---:|
+| **Mean score** | **362,341** |
+| **Best single game** | **624,164** |
+| Reaches 16,384 | 96.25% |
+| **Reaches 32,768** | **7.00%** |
+| Time per move | 2.7 ms |
+| Time per game | 40 s |
+
 
 ## Problem
 
@@ -73,24 +98,6 @@ several candidates — a confirmation run on completely fresh seeds.
 
 ---
 
-## Results
-
-**Best agent: the learned pattern table trained on 2.5 million self-play games,
-searching four moves ahead.**
-
-| | Result over 400 games |
-|---|---:|
-| **Mean score** | **362,341** |
-| **Best single game** | **624,164** |
-| Reaches 16,384 | 96.25% |
-| **Reaches 32,768** | **7.00%** |
-| Time per move | 2.7 ms |
-| Time per game | 40 s |
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/tile-distribution-dark.png">
-  <img src="docs/figures/tile-distribution.png" alt="How often the best agent reaches each tile" width="72%">
-</picture>
 
 ### How each approach compared
 
