@@ -10,7 +10,7 @@ solving, and a range of search and performance improvements.
 
 ## Results
 
-### Best Model
+### Best Model:
 
 <p align="center">
   <img src="docs/figures/best-game.gif" alt="The best agent playing its highest-scoring game, reaching a 32768 tile for 624,164 points" width="330">
@@ -37,14 +37,10 @@ solving, and a range of search and performance improvements.
   <img src="docs/figures/tile-distribution.png" alt="Highest tile each game ended with" width="72%">
 </picture>
 
-A game's score is almost entirely determined by the largest tile it reaches —
-roughly 355,000 for a game ending at 16,384 and 577,000 for one ending at
-32,768. Improving the agent is therefore mostly a matter of reaching larger tiles
-more often, which is why the distribution above matters as much as the average.
-
 ### How each approach compared
 
-Every row below plays four moves ahead:
+We implemented different strategies of teaching our agent how to play and tested game performance. Primarily, we used various forms of hand-written heuristic board valuation formulas, and then temporal-difference reinforcement learning.
+Every model approach played using a search process looking four moves ahead:
 
 | Approach | Mean score |
 |---|---:|
@@ -60,7 +56,7 @@ Every row below plays four moves ahead:
   <img src="docs/figures/progression.png" alt="Mean score of every agent version" width="100%">
 </picture>
 
-The hand-written rows search exhaustively while the learned rows prune unlikely
+Note: The hand-written rows search exhaustively through all possible branches of the search tree, while the learned rows prune unlikely
 branches, so the two groups are not strictly interchangeable — the hand-written
 agents received slightly more search per move, meaning the gap understates rather
 than flatters the learned networks.
@@ -70,10 +66,10 @@ than flatters the learned networks.
 
 ---
 
-## Training
+## Training Process
 
 The current best agent learns by temporal-difference training over 2.5 million
-self-play games.
+self-play games. More details can be seen below in the methodology section below.
 
 | | |
 |---|---|
@@ -95,23 +91,22 @@ bits, so an entire move costs four table reads rather than any loop over squares
 **Search — expectimax:**  The search alternates two kinds of layers: the agent's own move, where it takes the
 best option available, and the game's random tile placement, where it takes the
 probability-weighted average over every square the new tile could land in and
-both values it could take. Depth counts only the agent's decision layers.
+both values it could take. Depth counts only the agent's decision layers, not also including the chance layers.
 
 Depth is chosen when the agent *plays*, not when it trains, so one saved model
 can be run at any strength — the same weights score 226,325 searching one move
-ahead and 334,030 searching three. Because the chance layers branch very widely,
+ahead and 334,030 searching at depth three. Because the chance layers branch very widely,
 the search also abandons any line whose probability of being reached falls below
 a threshold, which is what makes four-move search affordable at a few
 milliseconds per move.
 
-**Baseline — hand-written formulas:** A person writes a formula scoring how good
-a board looks, and the search picks the move leading to the best-looking board.
+**Baseline — hand-written formulas approach:** Manually written heuristic formulas measuring board value, and the search picks the move leading to the best-looking board.
 Six versions were built, scoring properties such as the number of empty squares,
 whether tiles descend in order along a path, whether similar values sit beside
-each other, and whether the largest tile is anchored in a corner. Nothing is
+each other, and whether the largest tile is anchored in a corner. Nothing is actively
 learned; all the knowledge is in the formula.
 
-**Model — n-tuple board segmentation:** Rather than score the whole board at
+**Model — n-tuple board segmentation approach:** Rather than score the whole board at
 once, five overlapping windows of six squares each are laid over it. Every
 possible arrangement of tiles visible through a window has its own stored value,
 and the board's value is the sum of the five lookups. This makes the model a
@@ -122,11 +117,11 @@ Each window's eight rotations and reflections share one set of values, so a boar
 and its mirror image are automatically scored the same, and every update teaches
 eight equivalent positions at once.
 
-**Training — temporal-difference learning:** The agent plays against itself.
+**Training — temporal-difference learning:** The agent plays numerous games against itself.
 After each move it compares what it predicted a position was worth against what
 it turned out to be worth one move later, and nudges the stored values toward the
 truth. No human game knowledge and no recorded games are used. Three refinements
-mattered:
+improved performance:
 
 - **Temporal coherence:** Each stored value gets its own learning rate instead of
   sharing one global rate. A value whose past corrections consistently pointed the
@@ -324,25 +319,36 @@ About three hours for 2.5 million games on eight cores:
 
 ## Limitations and future work
 
-**What this project does not solve.** The agent reaches 32,768 in 7 percent of
+**What this project does not solve:** The agent reaches 32,768 in 7 percent of
 games and has not breached that cliff reliably. The 65,536 tile — likely the
 highest achievable on a 4×4 board — is currently out of reach.
 
-**The barrier is not understood.** Six explanations have been tested and refuted:
+**The barrier is not understood:** Six explanations have been tested and refuted:
 skill transfer across tile scales, search depth, search breadth, whole-board
 vision, position quality on arrival, and training from late-game positions. The
 only lever that moves it is training volume, and that relationship reverses past
 2.5 million games.
 
-**The strongest open lead.** The peak sits 500,000 games after a learning-rate
+**The strongest open lead:** The peak sits 500,000 games after a learning-rate
 reset, not at any particular training total. If the reset is what produces it
 rather than the total, then periodic resets are a repeatable lever rather than a
 one-off — cheap to test, and not yet tested.
 
-**Known measurement gaps.** No agent has been benchmarked under the originally
+**Known measurement gaps:** No agent has been benchmarked under the originally
 intended 250 millisecond-per-move time budget; every result here is fixed-depth.
 Per-move timing distributions are not recorded, only averages.
 
-**Memory.** Configurations reaching higher scores in published work need roughly
+**Memory:** Configurations reaching higher scores in published work need roughly
 15 GB. Doubling the table to 512 MB was measured here and is 34 percent *worse*
 at this training scale — more capacity needs proportionally more training.
+
+---
+
+## References:
+
+Inspiration for architecture, structure and methodology was taken from numerous answers from this website: 
+<https://stackoverflow.com/questions/22342854/what-is-the-optimal-algorithm-for-the-game-2048>, specifically the answers from 
+- nneonneo
+- game_difficulty
+- SiminSimin
+
